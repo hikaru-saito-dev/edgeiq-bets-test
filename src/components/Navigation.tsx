@@ -49,6 +49,7 @@ export default function Navigation() {
     ...(!loading && isAuthorized && !(role === 'member' && hideLeaderboardFromMembers)
       ? [{ label: 'Leaderboard', href: '/leaderboard' }]
       : []),
+    ...(isAuthorized && !loading ? [{ label: 'Following', href: '/following' }] : []),
     ...(isAuthorized && !loading ? [{ label: 'Profile', href: '/profile' }] : []),
     ...((role === 'companyOwner' || role === 'owner') && !loading ? [{ label: 'Users', href: '/users' }] : []),
   ];
@@ -172,6 +173,28 @@ export default function Navigation() {
           >
             Leaderboard
           </Button>
+          )}
+          {!loading && isAuthorized && (
+            <Button 
+              component={Link} 
+              href="/following"
+              sx={{
+                  color: navTextColor,
+                fontWeight: 500,
+                textTransform: 'none',
+                fontSize: '0.95rem',
+                px: 2,
+                borderRadius: 1,
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                    color: navTextColor,
+                    background: navHoverBg,
+                  transform: 'translateY(-1px)',
+                },
+              }}
+            >
+              Following
+            </Button>
           )}
           {!loading && isAuthorized && (
             <Button 

@@ -95,6 +95,12 @@ interface UserData {
     url: string;
     isPremium?: boolean;
   }>;
+  followOfferEnabled?: boolean;
+  followOfferPriceCents?: number;
+  followOfferNumPlays?: number;
+  followOfferPlanId?: string;
+  followOfferCheckoutUrl?: string;
+  _id?: string;
 }
 
 export default function ProfileForm() {
@@ -114,6 +120,10 @@ export default function ProfileForm() {
     url: string;
     isPremium?: boolean;
   }>>([]);
+  const [followOfferEnabled, setFollowOfferEnabled] = useState(false);
+  const [followOfferPriceCents, setFollowOfferPriceCents] = useState<number>(0);
+  const [followOfferNumPlays, setFollowOfferNumPlays] = useState<number>(10);
+  const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [userData, setUserData] = useState<UserData | null>(null);
   const [personalStats, setPersonalStats] = useState<UserStats | null>(null);
   const [companyStats, setCompanyStats] = useState<UserStats | null>(null);
@@ -186,6 +196,9 @@ export default function ProfileForm() {
       setNotifyOnSettlement(profileData.user.notifyOnSettlement ?? false);
       setOnlyNotifyWinningSettlements(profileData.user.onlyNotifyWinningSettlements ?? false);
       setMembershipPlans(profileData.user.membershipPlans || []);
+      setFollowOfferEnabled(profileData.user.followOfferEnabled ?? false);
+      setFollowOfferPriceCents(profileData.user.followOfferPriceCents ?? 0);
+      setFollowOfferNumPlays(profileData.user.followOfferNumPlays ?? 10);
       setPersonalStats(profileData.personalStats);
       setCompanyStats(profileData.companyStats || null);
       setBets(betsData.bets || []);
@@ -259,6 +272,7 @@ export default function ProfileForm() {
         notifyOnSettlement?: boolean;
         onlyNotifyWinningSettlements?: boolean;
         membershipPlans?: typeof membershipPlans;
+        followOfferEnabled?: boolean;
       } = {
         alias,
         webhooks: webhooks.filter(w => w.name.trim() && w.url.trim()),
@@ -269,10 +283,45 @@ export default function ProfileForm() {
       // Only owners and companyOwners can set opt-in and membership plans
       // Only companyOwners can set hideLeaderboardFromMembers
       // Company ID, name, and description are auto-set from Whop
-      if (role === 'companyOwner') {
+      if (role === 'companyOwner' || role === 'owner') {
         updateData.optIn = optIn;
-        updateData.hideLeaderboardFromMembers = hideLeaderboardFromMembers;
         updateData.membershipPlans = validPlans;
+        updateData.followOfferEnabled = followOfferEnabled;
+        
+        // Handle follow offer settings - create checkout link if enabled with valid settings
+        if (followOfferEnabled && followOfferPriceCents > 0 && followOfferNumPlays > 0) {
+          // Create checkout link when follow offer is enabled
+          setCreatingCheckout(true);
+          try {
+            const checkoutResponse = await apiRequest('/api/follow/checkout', {
+              method: 'POST',
+              body: JSON.stringify({
+                priceCents: followOfferPriceCents,
+                numPlays: followOfferNumPlays,
+                capperUserId: userData?._id || userId,
+                capperUsername: userData?.whopUsername || 'woodiee',
+              }),
+            });
+            
+            if (!checkoutResponse.ok) {
+              const error = await checkoutResponse.json() as { error: string };
+              throw new Error(error.error || 'Failed to create checkout link');
+            }
+            
+            // Checkout link is automatically saved to user by the API
+          } catch (checkoutError) {
+            const message = checkoutError instanceof Error ? checkoutError.message : 'Failed to create checkout link';
+            toast.showError(message);
+            setCreatingCheckout(false);
+            return;
+          } finally {
+            setCreatingCheckout(false);
+          }
+        }
+      }
+      
+      if (role === 'companyOwner') {
+        updateData.hideLeaderboardFromMembers = hideLeaderboardFromMembers;
       }
 
       const response = await apiRequest('/api/user', { userId, companyId, method: 'PATCH', body: JSON.stringify(updateData) });
@@ -1001,6 +1050,121 @@ export default function ProfileForm() {
             Add Membership Plan
           </Button>
         </Box>
+
+        {/* Follow Offer Settings Section */}
+        <Divider sx={{ my: 4, borderColor: alpha(theme.palette.divider, 0.5) }} />
+        <Box mb={3}>
+          <Typography variant="h6" sx={{ color: 'var(--app-text)', mb: 1, fontWeight: 600 }}>
+            Follow Offer Settings
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'var(--text-muted)' }}>
+            Allow users to pay to follow your next plays. A checkout link will be automatically generated.
+          </Typography>
+        </Box>
+
+        <FormControlLabel
+          control={
+            <Switch
+              checked={followOfferEnabled}
+              onChange={(e) => setFollowOfferEnabled(e.target.checked)}
+              disabled={creatingCheckout}
+              sx={{
+                '& .MuiSwitch-switchBase.Mui-checked': {
+                  color: theme.palette.primary.main,
+                },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                  backgroundColor: theme.palette.primary.main,
+                },
+              }}
+            />
+          }
+          label={
+            <Box>
+              <Typography variant="body2" sx={{ color: 'var(--app-text)', fontWeight: 500 }}>
+                Enable Follow Offer
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'var(--text-muted)', display: 'block' }}>
+                Allow users to purchase access to your next plays
+              </Typography>
+            </Box>
+          }
+          sx={{ mb: 3, color: 'var(--app-text)' }}
+        />
+
+        {followOfferEnabled && (
+          <Paper
+            sx={{
+              p: 3,
+              mb: 3,
+              bgcolor: alpha(theme.palette.primary.main, isDark ? 0.15 : 0.08),
+              border: `1px solid ${alpha(theme.palette.primary.main, isDark ? 0.3 : 0.2)}`,
+              borderRadius: 3,
+            }}
+          >
+            <TextField
+              fullWidth
+              label="Price (in dollars)"
+              type="number"
+              value={followOfferPriceCents > 0 ? (followOfferPriceCents / 100).toFixed(2) : ''}
+              onChange={(e) => {
+                const dollars = parseFloat(e.target.value) || 0;
+                setFollowOfferPriceCents(Math.round(dollars * 100));
+              }}
+              placeholder="10.00"
+              margin="normal"
+              size="small"
+              required
+              disabled={creatingCheckout}
+              helperText="Price users will pay to follow your plays"
+              inputProps={{ min: 0, step: 0.01 }}
+              sx={fieldStyles}
+            />
+
+            <TextField
+              fullWidth
+              label="Number of Plays"
+              type="number"
+              value={followOfferNumPlays}
+              onChange={(e) => setFollowOfferNumPlays(Math.max(1, parseInt(e.target.value) || 1))}
+              placeholder="10"
+              margin="normal"
+              size="small"
+              required
+              disabled={creatingCheckout}
+              helperText="Number of plays users will receive"
+              inputProps={{ min: 1 }}
+              sx={fieldStyles}
+            />
+
+            {creatingCheckout && (
+              <Box display="flex" alignItems="center" gap={1} mt={2}>
+                <CircularProgress size={16} />
+                <Typography variant="body2" sx={{ color: 'var(--text-muted)' }}>
+                  Creating checkout link...
+                </Typography>
+              </Box>
+            )}
+
+            {userData?.followOfferCheckoutUrl && (
+              <Box
+                sx={{
+                  mt: 2,
+                  p: 2,
+                  borderRadius: 2,
+                  backgroundColor: alpha(theme.palette.success.main, isDark ? 0.2 : 0.1),
+                  border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
+                }}
+              >
+                <Typography variant="body2" sx={{ color: 'var(--app-text)', fontWeight: 500, mb: 0.5 }}>
+                  Checkout Link Generated
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'var(--text-muted)', wordBreak: 'break-all' }}>
+                  {userData.followOfferCheckoutUrl}
+                </Typography>
+              </Box>
+            )}
+          </Paper>
+        )}
 
         <Box display="flex" gap={2} flexWrap="wrap" mt={3}>
           <Button

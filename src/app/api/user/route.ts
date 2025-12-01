@@ -59,6 +59,7 @@ const updateUserSchema = z.object({
     url: whopProductUrlSchema,
     isPremium: z.boolean().optional(),
   })).optional(), // Only owners and companyOwners can manage membership plans
+  followOfferEnabled: z.boolean().optional(), // Only for disabling follow offer (enabling is via /api/follow/checkout)
 });
 
 /**
@@ -392,6 +393,10 @@ export async function GET() {
         onlyNotifyWinningSettlements: user.onlyNotifyWinningSettlements ?? false,
         membershipPlans: user.membershipPlans || [],
         hideLeaderboardFromMembers: user.hideLeaderboardFromMembers ?? false,
+        followOfferEnabled: user.followOfferEnabled ?? false,
+        followOfferPriceCents: user.followOfferPriceCents,
+        followOfferNumPlays: user.followOfferNumPlays,
+        followOfferCheckoutUrl: user.followOfferCheckoutUrl,
       },
       personalStats,
       companyStats, // Only for owners with companyId
@@ -464,6 +469,14 @@ export async function PATCH(request: NextRequest) {
       // Only companyOwners can set hideLeaderboardFromMembers
       if (validated.hideLeaderboardFromMembers !== undefined) {
         user.hideLeaderboardFromMembers = validated.hideLeaderboardFromMembers;
+      }
+      
+      // Only owners can disable follow offer (enable/price/plays managed via /api/follow/checkout)
+      if (validated.followOfferEnabled !== undefined) {
+        if (!validated.followOfferEnabled) {
+          // Disable follow offer
+          user.followOfferEnabled = false;
+        }
       }
     } else {
       // Admins cannot opt-in or manage membership plans

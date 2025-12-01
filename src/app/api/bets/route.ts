@@ -11,7 +11,6 @@ import {
   type MarketSelectionInput,
 } from '@/utils/validateBet';
 import { z } from 'zod';
-import { updateUserStats } from '@/lib/stats';
 import { 
   notifyBetCreated, 
   notifyBetDeleted,
@@ -741,6 +740,34 @@ export async function POST(request: NextRequest) {
 
     // All validations passed - now create the bet
     const bet = await Bet.create(betData);
+
+    // Track consumed plays for follow purchases (only for main bets, not parlay legs)
+    try {
+      const { FollowPurchase } = await import('@/models/FollowPurchase');
+      
+      // Find all active follow purchases for this capper
+      const activeFollows = await FollowPurchase.find({
+        capperUserId: user._id,
+        status: 'active',
+      });
+
+      // For each active follow, increment consumed plays if there are remaining plays
+      for (const follow of activeFollows) {
+        if (follow.numPlaysConsumed < follow.numPlaysPurchased) {
+          follow.numPlaysConsumed += 1;
+          
+          // If all plays consumed, mark as completed
+          if (follow.numPlaysConsumed >= follow.numPlaysPurchased) {
+            follow.status = 'completed';
+          }
+          
+          await follow.save();
+        }
+      }
+    } catch (followError) {
+      // Don't fail bet creation if follow tracking fails
+      console.error('Error tracking follow purchases:', followError);
+    }
 
     // If this is a parlay, create individual bet entries for each line
     const parlayLines: IBet[] = [];

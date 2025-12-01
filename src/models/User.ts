@@ -36,6 +36,12 @@ export interface IUser extends Document {
   membershipUrl?: string; // Legacy: Primary membership URL (deprecated, use membershipPlans)
   optIn: boolean; // Only owners can opt-in to leaderboard
   hideLeaderboardFromMembers?: boolean; // Company owner setting to hide leaderboard from members
+  // Follow offer settings (only for company owners/owners)
+  followOfferEnabled?: boolean; // Whether follow offer is enabled
+  followOfferPriceCents?: number; // Price in cents (e.g., 1000 = $10.00)
+  followOfferNumPlays?: number; // Number of plays included in follow purchase
+  followOfferPlanId?: string; // Whop plan ID (created automatically when settings saved)
+  followOfferCheckoutUrl?: string; // Checkout URL with affiliate param
   stats: {
     winRate: number;
     roi: number;
@@ -81,6 +87,11 @@ const UserSchema = new Schema<IUser>({
   membershipUrl: { type: String }, // Legacy field for backward compatibility
   optIn: { type: Boolean, default: false }, // Default false, only owners can opt-in
   hideLeaderboardFromMembers: { type: Boolean, default: false }, // Company owner setting to hide leaderboard from members
+  followOfferEnabled: { type: Boolean, default: false }, // Whether follow offer is enabled
+  followOfferPriceCents: { type: Number, min: 0 }, // Price in cents
+  followOfferNumPlays: { type: Number, min: 1 }, // Number of plays included
+  followOfferPlanId: { type: String }, // Whop plan ID
+  followOfferCheckoutUrl: { type: String }, // Checkout URL with affiliate
   stats: {
     winRate: { type: Number, default: 0 },
     roi: { type: Number, default: 0 },

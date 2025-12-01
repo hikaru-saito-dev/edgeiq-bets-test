@@ -397,6 +397,14 @@ export async function GET(request: NextRequest) {
         whopAvatarUrl: entry.whopAvatarUrl,
         companyId: entry.companyId,
         membershipPlans,
+        followOffer: entry.followOfferEnabled
+          ? {
+              enabled: entry.followOfferEnabled,
+              priceCents: entry.followOfferPriceCents || 0,
+              numPlays: entry.followOfferNumPlays || 0,
+              checkoutUrl: entry.followOfferCheckoutUrl || null,
+            }
+          : null,
         winRate: Number(entry.winRate ?? 0),
         roi: Number(entry.roi ?? 0),
         unitsPL: Number(entry.unitsPL ?? 0),

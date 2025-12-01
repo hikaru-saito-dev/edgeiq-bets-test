@@ -39,6 +39,7 @@ import { useToast } from './ToastProvider';
 import { alpha, useTheme } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
 import InputAdornment from '@mui/material/InputAdornment';
+import FollowDetailModal from './FollowDetailModal';
 
 interface MembershipPlan {
   id: string;
@@ -48,6 +49,13 @@ interface MembershipPlan {
   url: string;
   affiliateLink: string | null;
   isPremium: boolean;
+}
+
+interface FollowOffer {
+  enabled: boolean;
+  priceCents: number;
+  numPlays: number;
+  checkoutUrl: string | null;
 }
 
 interface LeaderboardEntry {
@@ -60,6 +68,7 @@ interface LeaderboardEntry {
   whopAvatarUrl?: string;
   companyId: string;
   membershipPlans?: MembershipPlan[];
+  followOffer?: FollowOffer | null;
   winRate: number;
   unitsPL: number;
   plFromAggregate: number;
@@ -84,6 +93,8 @@ export default function LeaderboardTable() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<LeaderboardEntry | null>(null);
   const [membershipModalOpen, setMembershipModalOpen] = useState(false);
+  const [selectedFollowEntry, setSelectedFollowEntry] = useState<LeaderboardEntry | null>(null);
+  const [followModalOpen, setFollowModalOpen] = useState(false);
 
   // pagination + search
   const [page, setPage] = useState(1);
@@ -128,6 +139,16 @@ export default function LeaderboardTable() {
   const handleCloseModal = () => {
     setMembershipModalOpen(false);
     setSelectedCompany(null);
+  };
+
+  const handleViewFollow = (entry: LeaderboardEntry) => {
+    setSelectedFollowEntry(entry);
+    setFollowModalOpen(true);
+  };
+
+  const handleCloseFollowModal = () => {
+    setFollowModalOpen(false);
+    setSelectedFollowEntry(null);
   };
 
   // Removed unused copyAffiliateLink function
@@ -543,26 +564,45 @@ export default function LeaderboardTable() {
                         </TableCell>
                         <TableCell align="center" sx={{ color: 'var(--app-text)' }}>{entry.longestStreak}</TableCell>
                         <TableCell align="center">
-                          {entry.membershipPlans && entry.membershipPlans.length > 0 ? (
-                            <Button
-                              variant="contained"
-                              size="small"
-                              onClick={() => handleViewMembership(entry)}
-                              sx={{
-                                background: 'linear-gradient(135deg, #22c55e, #059669)',
-                                color: 'white',
-                                '&:hover': {
-                                  background: 'linear-gradient(135deg, #16a34a, #047857)',
-                                },
-                              }}
-                            >
-                              View Membership
-                            </Button>
-                          ) : (
-                            <Typography variant="caption" sx={{ color: 'var(--text-muted)' }}>
-                              No membership
-                            </Typography>
-                          )}
+                          <Box display="flex" flexDirection="column" gap={1} alignItems="center">
+                            {entry.membershipPlans && entry.membershipPlans.length > 0 ? (
+                              <Button
+                                variant="contained"
+                                size="small"
+                                onClick={() => handleViewMembership(entry)}
+                                sx={{
+                                  background: 'linear-gradient(135deg, #22c55e, #059669)',
+                                  color: 'white',
+                                  '&:hover': {
+                                    background: 'linear-gradient(135deg, #16a34a, #047857)',
+                                  },
+                                }}
+                              >
+                                View Membership
+                              </Button>
+                            ) : (
+                              <Typography variant="caption" sx={{ color: 'var(--text-muted)' }}>
+                                No membership
+                              </Typography>
+                            )}
+                            {entry.followOffer?.enabled && (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => handleViewFollow(entry)}
+                                sx={{
+                                  borderColor: theme.palette.primary.main,
+                                  color: theme.palette.primary.main,
+                                  '&:hover': {
+                                    borderColor: theme.palette.primary.dark,
+                                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                                  },
+                                }}
+                              >
+                                Follow
+                              </Button>
+                            )}
+                          </Box>
                         </TableCell>
                       </TableRow>
                     );
@@ -765,6 +805,13 @@ export default function LeaderboardTable() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Follow Detail Modal */}
+      <FollowDetailModal
+        open={followModalOpen}
+        onClose={handleCloseFollowModal}
+        entry={selectedFollowEntry}
+      />
     </Box>
   );
 }
