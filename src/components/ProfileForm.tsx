@@ -1145,25 +1145,6 @@ export default function ProfileForm() {
                 </Typography>
               </Box>
             )}
-
-            {userData?.followOfferCheckoutUrl && (
-              <Box
-                sx={{
-                  mt: 2,
-                  p: 2,
-                  borderRadius: 2,
-                  backgroundColor: alpha(theme.palette.success.main, isDark ? 0.2 : 0.1),
-                  border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
-                }}
-              >
-                <Typography variant="body2" sx={{ color: 'var(--app-text)', fontWeight: 500, mb: 0.5 }}>
-                  Checkout Link Generated
-                </Typography>
-                <Typography variant="caption" sx={{ color: 'var(--text-muted)', wordBreak: 'break-all' }}>
-                  {userData.followOfferCheckoutUrl}
-                </Typography>
-              </Box>
-            )}
           </Paper>
         )}
 

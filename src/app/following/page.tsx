@@ -73,7 +73,7 @@ export default function FollowingPage() {
   const toast = useToast();
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  const { isAuthorized, loading: accessLoading } = useAccess();
+  const { isAuthorized, loading: accessLoading, userId, companyId } = useAccess();
   const [bets, setBets] = useState<Bet[]>([]);
   const [follows, setFollows] = useState<Follow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,7 +91,7 @@ export default function FollowingPage() {
         page: String(page),
         pageSize: String(pageSize),
       });
-      const response = await apiRequest(`/api/follow/feed?${params.toString()}`);
+      const response = await apiRequest(`/api/follow/feed?${params.toString()}`, { userId, companyId });
       if (!response.ok) {
         throw new Error('Failed to fetch following feed');
       }
