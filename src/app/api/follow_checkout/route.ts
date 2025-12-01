@@ -5,8 +5,6 @@ import { FollowPurchase } from '@/models/FollowPurchase';
 import { Whop } from '@whop/sdk';
 import type { PaymentSucceededWebhookEvent } from '@whop/sdk/resources/webhooks';
 
-export const runtime = 'nodejs';
-
 const WEBHOOK_SECRET = process.env.WHOP_WEBHOOK_SECRET;
 
 if (!WEBHOOK_SECRET) {
@@ -18,17 +16,21 @@ if (!WEBHOOK_SECRET) {
  * Webhook endpoint to receive payment.succeeded events from Whop
  * Creates FollowPurchase records when users purchase follow offers
  */
+// Disable body parsing - we need raw body for signature verification
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
 
-    // Get raw body for signature verification
+    // Get raw body as string for signature verification
     const body = await request.text();
     
-    // Get headers for webhook verification
-    const headers: Record<string, string> = {};
+    // Convert headers to plain object for SDK
+    const headersObj: Record<string, string> = {};
     request.headers.forEach((value, key) => {
-      headers[key.toLowerCase()] = value;
+      headersObj[key] = value;
     });
 
     // Initialize Whop SDK for webhook verification
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
     let event: PaymentSucceededWebhookEvent;
     try {
       const unwrapped = whopClient.webhooks.unwrap(body, {
-        headers,
+        headers: headersObj,
         key: WEBHOOK_SECRET,
       });
 
