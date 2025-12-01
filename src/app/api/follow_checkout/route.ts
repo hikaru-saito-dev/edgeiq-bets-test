@@ -23,44 +23,14 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.text();
-    
-    if (!body || body.length === 0) {
-      return NextResponse.json(
-        { error: 'Empty request body' },
-        { status: 400 }
-      );
-    }
-
+    const requestBodyText = await request.text();
     const headers = Object.fromEntries(request.headers);
-
-    let webhookData;
-    try {
-      webhookData = whopSdk.webhooks.unwrap(body, { headers });
-    } catch (error) {
-      try {
-        const parsed = JSON.parse(body);
-        if (parsed.action === 'payment.succeeded' && parsed.data === null) {
-          return NextResponse.json({ received: true, test: true }, { status: 200 });
-        }
-      } catch {
-      }
-      return NextResponse.json(
-        { error: 'Invalid webhook signature' },
-        { status: 401 }
-      );
+    const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
+    
+    if (webhookData.type === "payment.succeeded") {
+     waitUntil(handlePaymentSucceeded(webhookData.data));
     }
-
-    if (webhookData.type === 'payment.succeeded') {
-      waitUntil(handlePaymentSucceeded(webhookData.data));
-      return NextResponse.json({ received: true }, { status: 200 });
-    }
-
-    return NextResponse.json({ received: true }, { status: 200 });
-  } catch (error) {
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+    return new Response("OK", { status: 200 });
 }
 
 async function handlePaymentSucceeded(payment: Payment) {
@@ -149,6 +119,6 @@ async function handlePaymentSucceeded(payment: Payment) {
 
     await followPurchase.save();
   } catch (error) {
-    // Errors are handled silently - we've already returned 200 to Whop
+    console.error('Error processing follow purchase:', error);
   }
 }
