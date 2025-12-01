@@ -295,6 +295,8 @@ export default function ProfileForm() {
           try {
             const checkoutResponse = await apiRequest('/api/follow/checkout', {
               method: 'POST',
+              userId: userId || undefined,
+              companyId: companyId || undefined,
               body: JSON.stringify({
                 priceCents: followOfferPriceCents,
                 numPlays: followOfferNumPlays,
