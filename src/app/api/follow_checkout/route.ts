@@ -42,13 +42,8 @@ export async function POST(request: NextRequest) {
       webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
     } catch (error) {
       if (error instanceof WebhookVerificationError) {
-        // Signature verification failed - log and reject
-        console.error('Webhook verification failed:', error.message);
         return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
       }
-
-      // Other unexpected errors
-      console.error('Webhook processing error:', error);
       return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 
@@ -58,8 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true }, { status: 200 });
-  } catch (error) {
-    console.error('Unexpected error in webhook handler:', error);
+  } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -147,7 +141,7 @@ async function handlePaymentSucceeded(payment: Payment) {
     });
 
     await followPurchase.save();
-  } catch (error) {
-    console.error('Error processing payment webhook:', error instanceof Error ? error.message : error);
+  } catch {
+    // Silently fail - webhook already acknowledged with 200
   }
 }
