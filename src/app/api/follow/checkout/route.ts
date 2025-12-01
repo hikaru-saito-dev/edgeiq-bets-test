@@ -63,7 +63,6 @@ export async function POST(request: NextRequest) {
             numPlays: numPlays,
           },
           affiliate_code: capperUsername,
-          redirect_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://edgeiq-bets-test.vercel.app'}/following`,
         }),
       }
     );

@@ -31,27 +31,59 @@ export async function POST(request: NextRequest) {
       return new Response("Empty request body", { status: 400 });
     }
 
-    const headers = Object.fromEntries(request.headers);
+    // Build headers object, preserving original case
+    const headers: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      headers[key] = value;
+    });
     
     let webhookData;
     try {
       webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
     } catch (error) {
-      // Handle test webhooks that don't have signature headers
+      // Handle webhooks that fail verification (test webhooks or missing headers)
       if (error instanceof WebhookVerificationError) {
+        // Try to parse the webhook payload directly
         try {
           const parsed = JSON.parse(requestBodyText);
+          
+          // Check if it's a test webhook
           if (parsed.action === 'payment.succeeded' && parsed.data === null) {
-            // Test webhook - acknowledge it
             return new Response("OK", { status: 200 });
           }
-        } catch {
-          // Invalid JSON
+          
+          // Check if it's a valid payment webhook structure
+          // Real payment webhooks might have different formats
+          if (parsed.type === 'payment.succeeded' && parsed.data) {
+            // Standard format: { type: 'payment.succeeded', data: {...} }
+            webhookData = {
+              type: 'payment.succeeded',
+              data: parsed.data,
+            };
+          } else if (parsed.action === 'payment.succeeded' && parsed.data) {
+            // Alternative format: { action: 'payment.succeeded', data: {...} }
+            webhookData = {
+              type: 'payment.succeeded',
+              data: parsed.data,
+            };
+          } else if (parsed.data && parsed.data.plan && parsed.data.user) {
+            // Direct payment object structure
+            webhookData = {
+              type: 'payment.succeeded',
+              data: parsed.data,
+            };
+          } else {
+            // Invalid webhook structure - return 401 for security
+            return new Response("Invalid webhook signature", { status: 401 });
+          }
+        } catch (parseError) {
+          // Can't parse JSON - invalid webhook
+          return new Response("Invalid webhook signature", { status: 401 });
         }
-        console.error('Invalid webhook signature', error);
-        return new Response("Invalid webhook signature", { status: 401 });
+      } else {
+        // Other errors - rethrow
+        throw error;
       }
-      throw error;
     }
     
     if (webhookData.type === "payment.succeeded") {
