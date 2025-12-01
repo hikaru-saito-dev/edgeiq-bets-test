@@ -7,7 +7,11 @@ import type { PaymentSucceededWebhookEvent } from '@whop/sdk/resources/webhooks'
 
 export const runtime = 'nodejs';
 
-const WEBHOOK_SECRET = process.env.WHOP_WEBHOOK_SECRET || 'ws_a001c8771fdac4ab5a4fcff6c5bfdda0c8ebed9ca3df983b6490e79c4781f7d5';
+const WEBHOOK_SECRET = process.env.WHOP_WEBHOOK_SECRET;
+
+if (!WEBHOOK_SECRET) {
+  throw new Error('WHOP_WEBHOOK_SECRET environment variable is required');
+}
 
 /**
  * POST /api/follow_checkout
@@ -48,8 +52,6 @@ export async function POST(request: NextRequest) {
 
       event = unwrapped as PaymentSucceededWebhookEvent;
     } catch (error) {
-      // Signature verification failed
-      console.error('Webhook signature verification failed:', error);
       return NextResponse.json(
         { error: 'Invalid webhook signature' },
         { status: 401 }
@@ -59,12 +61,36 @@ export async function POST(request: NextRequest) {
     // Extract payment data
     const payment = event.data;
     const planId = payment.plan?.id;
-    const metadata = (payment.metadata || {}) as {
+    
+    // Check metadata in both payment.metadata and checkout_configuration.metadata
+    // Whop stores checkout metadata in the payment object, but the structure may vary
+    const paymentMetadata = (payment.metadata || {}) as {
       followPurchase?: boolean;
       capperUserId?: string;
       capperCompanyId?: string;
       numPlays?: number;
     };
+    
+    // Access checkout_configuration via type assertion since it may exist in the webhook payload
+    const paymentWithCheckout = payment as typeof payment & {
+      checkout_configuration?: {
+        metadata?: {
+          followPurchase?: boolean;
+          capperUserId?: string;
+          capperCompanyId?: string;
+          numPlays?: number;
+        };
+      };
+    };
+    
+    const checkoutMetadata = (paymentWithCheckout.checkout_configuration?.metadata || {}) as {
+      followPurchase?: boolean;
+      capperUserId?: string;
+      capperCompanyId?: string;
+      numPlays?: number;
+    };
+    
+    const metadata = { ...checkoutMetadata, ...paymentMetadata };
 
     // Check if this is a follow purchase
     if (!metadata.followPurchase || !planId) {
@@ -79,11 +105,6 @@ export async function POST(request: NextRequest) {
     const followerWhopUserId = payment.user?.id;
 
     if (!capperUserId || !capperCompanyId || !followerWhopUserId) {
-      console.error('Missing required metadata for follow purchase:', {
-        capperUserId,
-        capperCompanyId,
-        followerWhopUserId,
-      });
       return NextResponse.json(
         { error: 'Missing required metadata' },
         { status: 400 }
@@ -107,20 +128,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (!followerUser) {
-      console.error('Follower user not found:', {
-        whopUserId: followerWhopUserId,
-        companyId: capperCompanyId,
-      });
-      // Still return 200 so Whop doesn't retry
-      // User might not be set up yet in our system
-      return NextResponse.json({ received: true, userNotFound: true }, { status: 200 });
+      return NextResponse.json({ received: true }, { status: 200 });
     }
 
     // Find capper user
     const capperUser = await User.findById(capperUserId);
 
     if (!capperUser) {
-      console.error('Capper user not found:', capperUserId);
       return NextResponse.json(
         { error: 'Capper user not found' },
         { status: 400 }
@@ -129,10 +143,6 @@ export async function POST(request: NextRequest) {
 
     // Verify this plan ID matches the capper's follow offer plan
     if (capperUser.followOfferPlanId !== planId) {
-      console.error('Plan ID mismatch:', {
-        expected: capperUser.followOfferPlanId,
-        received: planId,
-      });
       return NextResponse.json(
         { error: 'Plan ID mismatch' },
         { status: 400 }
@@ -161,8 +171,6 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    console.error('Error processing webhook:', error);
-    // Return 500 so Whop will retry
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
