@@ -43,48 +43,97 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       // Handle webhooks that fail verification (test webhooks or missing headers)
       if (error instanceof WebhookVerificationError) {
+        // Get header names for debugging
+        const headerKeys = Object.keys(headers).map(k => k.toLowerCase());
+        const hasRequiredHeaders = 
+          headerKeys.includes('webhook-id') && 
+          headerKeys.includes('webhook-timestamp') && 
+          headerKeys.includes('webhook-signature');
+        
+        // Build debug info object
+        const debugInfo: any = {
+          error: 'Invalid webhook signature',
+          verificationError: error.message,
+          hasRequiredHeaders,
+          requiredHeaders: {
+            'webhook-id': headerKeys.includes('webhook-id'),
+            'webhook-timestamp': headerKeys.includes('webhook-timestamp'),
+            'webhook-signature': headerKeys.includes('webhook-signature'),
+          },
+          allHeaders: headers,
+          allHeaderKeys: Object.keys(headers),
+          allHeaderKeysLowercase: headerKeys,
+          bodyLength: requestBodyText.length,
+          bodyPreview: requestBodyText.substring(0, 500),
+          fullBody: requestBodyText.length < 2000 ? requestBodyText : requestBodyText.substring(0, 2000) + '... (truncated)',
+        };
+        
         // Try to parse the webhook payload directly
+        let parsed: any;
         try {
-          const parsed = JSON.parse(requestBodyText);
-          
-          // Check if it's a test webhook
-          if (parsed.action === 'payment.succeeded' && parsed.data === null) {
-            return new Response("OK", { status: 200 });
-          }
-          
-          // Check if it's a valid payment webhook structure
-          // Real payment webhooks might have different formats
-          if (parsed.type === 'payment.succeeded' && parsed.data) {
-            // Standard format: { type: 'payment.succeeded', data: {...} }
-            webhookData = {
-              type: 'payment.succeeded',
-              data: parsed.data,
-            };
-          } else if (parsed.action === 'payment.succeeded' && parsed.data) {
-            // Alternative format: { action: 'payment.succeeded', data: {...} }
-            webhookData = {
-              type: 'payment.succeeded',
-              data: parsed.data,
-            };
-          } else if (parsed.data && parsed.data.plan && parsed.data.user) {
-            // Direct payment object structure
-            webhookData = {
-              type: 'payment.succeeded',
-              data: parsed.data,
-            };
-          } else {
-            // Invalid webhook structure - return 401 for security
-            return new Response("Invalid webhook signature", { status: 401 });
-          }
+          parsed = JSON.parse(requestBodyText);
+          debugInfo.parsedSuccessfully = true;
+          debugInfo.parsedKeys = Object.keys(parsed);
+          debugInfo.parsedType = parsed.type || parsed.action;
+          debugInfo.parsedStructure = parsed;
         } catch (parseError) {
-          console.error('Invalid webhook signature', requestBodyText);
-          console.error('Error parsing webhook:', request.headers);
-          // Can't parse JSON - invalid webhook
-          return new Response("Invalid webhook signature", { status: 401 });
+          // Can't parse JSON - return error with details
+          debugInfo.parsedSuccessfully = false;
+          debugInfo.parseError = parseError instanceof Error ? parseError.message : 'Unknown parse error';
+          return NextResponse.json(debugInfo, { status: 401 });
         }
+        
+        // Check if it's a test webhook
+        if (parsed.action === 'payment.succeeded' && parsed.data === null) {
+          return NextResponse.json({
+            success: true,
+            message: 'Test webhook acknowledged',
+            debug: debugInfo,
+          }, { status: 200 });
+        }
+        
+        // Check if it's a valid payment webhook structure
+        // Real payment webhooks might have different formats
+        if (parsed.type === 'payment.succeeded' && parsed.data) {
+          // Standard format: { type: 'payment.succeeded', data: {...} }
+          webhookData = {
+            type: 'payment.succeeded',
+            data: parsed.data,
+          };
+          debugInfo.processedAs = 'Standard format with parsed.data';
+        } else if (parsed.action === 'payment.succeeded' && parsed.data) {
+          // Alternative format: { action: 'payment.succeeded', data: {...} }
+          webhookData = {
+            type: 'payment.succeeded',
+            data: parsed.data,
+          };
+          debugInfo.processedAs = 'Alternative format with parsed.action';
+        } else if (parsed.data && parsed.data.plan && parsed.data.user) {
+          // Direct payment object structure
+          webhookData = {
+            type: 'payment.succeeded',
+            data: parsed.data,
+          };
+          debugInfo.processedAs = 'Direct payment object structure';
+        } else {
+          // Invalid webhook structure - return error with details
+          debugInfo.reason = 'Invalid webhook structure - no matching format';
+          debugInfo.checkedFormats = [
+            'parsed.type === "payment.succeeded" && parsed.data',
+            'parsed.action === "payment.succeeded" && parsed.data',
+            'parsed.data && parsed.data.plan && parsed.data.user',
+          ];
+          return NextResponse.json(debugInfo, { status: 401 });
+        }
+        
+        // Log that we're processing without verification (for debugging)
+        debugInfo.warning = 'Processing webhook without signature verification';
       } else {
-        // Other errors - rethrow
-        throw error;
+        // Other errors - return with details
+        return NextResponse.json({
+          error: 'Internal server error',
+          reason: error instanceof Error ? error.message : 'Unknown error',
+        }, { status: 500 });
       }
     }
     
@@ -92,7 +141,17 @@ export async function POST(request: NextRequest) {
       waitUntil(handlePaymentSucceeded(webhookData.data));
     }
     
-    return new Response("OK", { status: 200 });
+    // Return success with debug info for troubleshooting
+    return NextResponse.json({
+      success: true,
+      message: "OK",
+      debug: {
+        webhookType: webhookData.type,
+        headersReceived: Object.keys(headers).length,
+        headerKeys: Object.keys(headers),
+        bodyLength: requestBodyText.length,
+      },
+    }, { status: 200 });
   } catch (error) {
     return new Response("Internal server error", { status: 500 });
   }
