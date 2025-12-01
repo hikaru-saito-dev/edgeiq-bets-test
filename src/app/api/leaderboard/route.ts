@@ -71,7 +71,7 @@ const buildSortSpec = (sortField: string | null, sortDirection: 'asc' | 'desc') 
 export async function GET(request: NextRequest) {
   try {
     await connectDB();
-    
+
     const { searchParams } = new URL(request.url);
     const range = (searchParams.get('range') || 'all') as 'all' | '30d' | '7d';
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     const sortDirection = (searchParams.get('sortDirection') || 'desc') as 'asc' | 'desc';
 
     // Only show companyOwners who opted in and have companyId set
-    const baseQuery: Record<string, unknown> = { 
+    const baseQuery: Record<string, unknown> = {
       optIn: true,
       role: 'companyOwner',
     };
@@ -399,11 +399,11 @@ export async function GET(request: NextRequest) {
         membershipPlans,
         followOffer: entry.followOfferEnabled
           ? {
-              enabled: entry.followOfferEnabled,
-              priceCents: entry.followOfferPriceCents || 0,
-              numPlays: entry.followOfferNumPlays || 0,
-              checkoutUrl: entry.followOfferCheckoutUrl || null,
-            }
+            enabled: entry.followOfferEnabled,
+            priceCents: entry.followOfferPriceCents || 0,
+            numPlays: entry.followOfferNumPlays || 0,
+            checkoutUrl: entry.followOfferCheckoutUrl || null,
+          }
           : null,
         winRate: Number(entry.winRate ?? 0),
         roi: Number(entry.roi ?? 0),
