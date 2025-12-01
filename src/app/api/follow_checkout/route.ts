@@ -77,6 +77,8 @@ export async function POST(request: NextRequest) {
             return new Response("Invalid webhook signature", { status: 401 });
           }
         } catch (parseError) {
+          console.error('Invalid webhook signature', requestBodyText);
+          console.error('Error parsing webhook:', request.headers);
           // Can't parse JSON - invalid webhook
           return new Response("Invalid webhook signature", { status: 401 });
         }
