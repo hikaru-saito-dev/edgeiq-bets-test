@@ -197,7 +197,7 @@ export default function ProfileForm() {
       setOnlyNotifyWinningSettlements(profileData.user.onlyNotifyWinningSettlements ?? false);
       setMembershipPlans(profileData.user.membershipPlans || []);
       setFollowOfferEnabled(profileData.user.followOfferEnabled ?? false);
-      setFollowOfferPriceDollars(profileData.user.followOfferPriceDollars ?? 0);
+      setFollowOfferPriceDollars(profileData.user.followOfferPriceCents ?? 0);
       setFollowOfferNumPlays(profileData.user.followOfferNumPlays ?? 10);
       setPersonalStats(profileData.personalStats);
       setCompanyStats(profileData.companyStats || null);
