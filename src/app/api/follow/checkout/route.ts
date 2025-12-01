@@ -5,7 +5,7 @@ import { User } from '@/models/User';
 export const runtime = 'nodejs';
 
 const WHOP_API_KEY = process.env.WHOP_API_KEY || '';
-const EDGEIQ_COMPANY_ID = process.env.NEXT_PUBLIC_WHOP_COMPANY_ID || 'biz_G4VyD9ctvjGZ8O'; // EdgeIQ company ID
+const EDGEIQ_COMPANY_ID = process.env.NEXT_PUBLIC_WHOP_COMPANY_ID || ''; // EdgeIQ company ID
 
 /**
  * POST /api/follow/checkout
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
             numPlays: numPlays,
           },
           affiliate_code: capperUsername, // Capper's username for affiliate tracking
-          redirect_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://edgeiq-bets.vercel.app'}/following`,
+          redirect_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://edgeiq-bets-test.vercel.app'}/following`,
         }),
       }
     );
