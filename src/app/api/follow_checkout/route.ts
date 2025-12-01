@@ -37,20 +37,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Convert Headers to plain object for SDK
-    // standardwebhooks expects lowercase header keys (webhook-id, webhook-timestamp, webhook-signature)
+    // Pass headers as-is to SDK (it will handle validation and normalization)
     const headersObj: Record<string, string> = {};
     request.headers.forEach((value, key) => {
-      // Normalize to lowercase for standardwebhooks compatibility
-      headersObj[key.toLowerCase()] = value;
+      headersObj[key] = value;
     });
-
-    // Verify required headers are present (standardwebhooks needs these)
-    if (!headersObj['webhook-id'] || !headersObj['webhook-timestamp'] || !headersObj['webhook-signature']) {
-      return NextResponse.json(
-        { error: 'Missing required webhook headers' },
-        { status: 400 }
-      );
-    }
 
     // Initialize Whop SDK for webhook verification
     const whopClient = new Whop({
