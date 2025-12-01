@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
+import { WebhookVerificationError } from 'standardwebhooks';
 import connectDB from '@/lib/db';
 import { User } from '@/models/User';
 import { FollowPurchase } from '@/models/FollowPurchase';
@@ -23,14 +24,43 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
+  try {
     const requestBodyText = await request.text();
+    
+    if (!requestBodyText || requestBodyText.length === 0) {
+      return new Response("Empty request body", { status: 400 });
+    }
+
     const headers = Object.fromEntries(request.headers);
-    const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
+    
+    let webhookData;
+    try {
+      webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
+    } catch (error) {
+      // Handle test webhooks that don't have signature headers
+      if (error instanceof WebhookVerificationError) {
+        try {
+          const parsed = JSON.parse(requestBodyText);
+          if (parsed.action === 'payment.succeeded' && parsed.data === null) {
+            // Test webhook - acknowledge it
+            return new Response("OK", { status: 200 });
+          }
+        } catch {
+          // Invalid JSON
+        }
+        return new Response("Invalid webhook signature", { status: 401 });
+      }
+      throw error;
+    }
     
     if (webhookData.type === "payment.succeeded") {
-     waitUntil(handlePaymentSucceeded(webhookData.data));
+      waitUntil(handlePaymentSucceeded(webhookData.data));
     }
+    
     return new Response("OK", { status: 200 });
+  } catch (error) {
+    return new Response("Internal server error", { status: 500 });
+  }
 }
 
 async function handlePaymentSucceeded(payment: Payment) {
@@ -119,6 +149,6 @@ async function handlePaymentSucceeded(payment: Payment) {
 
     await followPurchase.save();
   } catch (error) {
-    console.error('Error processing follow purchase:', error);
+    // Errors are handled silently - we've already returned 200 to Whop
   }
 }
