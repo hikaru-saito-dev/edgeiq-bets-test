@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
       }
 
       event = unwrapped as PaymentSucceededWebhookEvent;
+      console.error('Error processing webhook:', event);
       
       // Validate event has required data structure
       if (!event.data) {
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
+
       // Handle Base64 decoding errors (common with test webhooks that have malformed signatures)
       if (error instanceof Error && error.message.includes('Base64Coder')) {
         return NextResponse.json(
