@@ -5,6 +5,7 @@ import { FollowPurchase } from '@/models/FollowPurchase';
 import { Whop } from '@whop/sdk';
 import type { PaymentSucceededWebhookEvent } from '@whop/sdk/resources/webhooks';
 import { WebhookVerificationError } from 'standardwebhooks';
+import { error, log } from 'node:console';
 
 const WEBHOOK_SECRET = process.env.WHOP_WEBHOOK_SECRET;
 
@@ -35,6 +36,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    console.error('Body:', body);
+    console.error('Headers:', request.headers);
+    return NextResponse.json({ body }, { status: 200 });
 
     // Convert Headers to plain object for SDK
     // Pass headers as-is to SDK (it will handle validation and normalization)
@@ -72,12 +76,6 @@ export async function POST(request: NextRequest) {
       }
 
       event = unwrapped as PaymentSucceededWebhookEvent;
-
-      console.error('Error processing webhook:', event);
-      return NextResponse.json(
-        { error: 'Error processing webhook:', event },
-        { status: 400 }
-      );
       
       // Validate event has required data structure
       if (!event.data) {
@@ -96,12 +94,12 @@ export async function POST(request: NextRequest) {
       }
 
       // Handle Base64 decoding errors (common with test webhooks that have malformed signatures)
-      if (error instanceof Error && error.message.includes('Base64Coder')) {
-        return NextResponse.json(
-          { error: 'Invalid webhook signature format' },
-          { status: 401 }
-        );
-      }
+      // if (error instanceof Error && error.message.includes('Base64Coder')) {
+      //   return NextResponse.json(
+      //     { error: 'Invalid webhook signature format' },
+      //     { status: 401 }
+      //   );
+      // }
       // Handle JSON parsing errors
       if (error instanceof SyntaxError) {
         return NextResponse.json(
