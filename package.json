@@ -13,6 +13,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.4",
     "@mui/material": "^7.3.4",
+    "@vercel/functions": "^3.3.4",
     "@whop/api": "^0.0.51",
     "@whop/sdk": "^0.0.7",
     "clsx": "^2.1.1",

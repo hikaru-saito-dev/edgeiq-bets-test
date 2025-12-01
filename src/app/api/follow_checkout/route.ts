@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import connectDB from '@/lib/db';
 import { User } from '@/models/User';
 import { FollowPurchase } from '@/models/FollowPurchase';
@@ -52,8 +53,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (webhookData.type === 'payment.succeeded') {
-      handlePaymentSucceeded(webhookData.data).catch(() => {
-      });
+      waitUntil(handlePaymentSucceeded(webhookData.data));
       return NextResponse.json({ received: true }, { status: 200 });
     }
 
@@ -149,6 +149,6 @@ async function handlePaymentSucceeded(payment: Payment) {
 
     await followPurchase.save();
   } catch (error) {
-    console.error('Error processing follow purchase:', error);
+    // Errors are handled silently - we've already returned 200 to Whop
   }
 }
