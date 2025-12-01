@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
           headerKeys.includes('webhook-signature');
         
         // Build debug info object
-        const debugInfo: any = {
+        const debugInfo: Record<string, unknown> = {
           error: 'Invalid webhook signature',
           verificationError: error.message,
           hasRequiredHeaders,
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         };
         
         // Try to parse the webhook payload directly
-        let parsed: any;
+        let parsed: Record<string, unknown>;
         try {
           parsed = JSON.parse(requestBodyText);
           debugInfo.parsedSuccessfully = true;
@@ -94,25 +94,31 @@ export async function POST(request: NextRequest) {
         
         // Check if it's a valid payment webhook structure
         // Real payment webhooks might have different formats
-        if (parsed.type === 'payment.succeeded' && parsed.data) {
+        if (parsed.type === 'payment.succeeded' && parsed.data && typeof parsed.data === 'object' && parsed.data !== null) {
           // Standard format: { type: 'payment.succeeded', data: {...} }
           webhookData = {
             type: 'payment.succeeded',
-            data: parsed.data,
+            data: parsed.data as Payment,
           };
           debugInfo.processedAs = 'Standard format with parsed.data';
-        } else if (parsed.action === 'payment.succeeded' && parsed.data) {
+        } else if (parsed.action === 'payment.succeeded' && parsed.data && typeof parsed.data === 'object' && parsed.data !== null) {
           // Alternative format: { action: 'payment.succeeded', data: {...} }
           webhookData = {
             type: 'payment.succeeded',
-            data: parsed.data,
+            data: parsed.data as Payment,
           };
           debugInfo.processedAs = 'Alternative format with parsed.action';
-        } else if (parsed.data && parsed.data.plan && parsed.data.user) {
+        } else if (
+          parsed.data && 
+          typeof parsed.data === 'object' && 
+          parsed.data !== null &&
+          'plan' in parsed.data && 
+          'user' in parsed.data
+        ) {
           // Direct payment object structure
           webhookData = {
             type: 'payment.succeeded',
-            data: parsed.data,
+            data: parsed.data as Payment,
           };
           debugInfo.processedAs = 'Direct payment object structure';
         } else {
@@ -152,7 +158,7 @@ export async function POST(request: NextRequest) {
         bodyLength: requestBodyText.length,
       },
     }, { status: 200 });
-  } catch (error) {
+  } catch {
     return new Response("Internal server error", { status: 500 });
   }
 }
@@ -242,7 +248,7 @@ async function handlePaymentSucceeded(payment: Payment) {
     });
 
     await followPurchase.save();
-  } catch (error) {
+  } catch {
     // Errors are handled silently - we've already returned 200 to Whop
   }
 }
