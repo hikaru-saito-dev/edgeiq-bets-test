@@ -298,7 +298,7 @@ export default function ProfileForm() {
               userId: userId || undefined,
               companyId: companyId || undefined,
               body: JSON.stringify({
-                priceCents: followOfferPriceDollars * 100,
+                priceCents: followOfferPriceDollars,
                 numPlays: followOfferNumPlays,
                 capperUsername: userData?.whopUsername || 'woodiee',
               }),
