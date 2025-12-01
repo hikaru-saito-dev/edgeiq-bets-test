@@ -300,7 +300,6 @@ export default function ProfileForm() {
               body: JSON.stringify({
                 priceCents: followOfferPriceCents,
                 numPlays: followOfferNumPlays,
-                capperUserId: userData?._id || userId,
                 capperUsername: userData?.whopUsername || 'woodiee',
               }),
             });

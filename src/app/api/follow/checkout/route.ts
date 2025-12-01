@@ -25,17 +25,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { priceCents, numPlays, capperUserId, capperUsername } = body;
+    const { priceCents, numPlays, capperUsername } = body;
 
-    if (!priceCents || !numPlays || !capperUserId || !capperUsername) {
+    if (!priceCents || !numPlays || !capperUsername) {
       return NextResponse.json(
-        { error: 'Missing required fields: priceCents, numPlays, capperUserId, capperUsername' },
+        { error: 'Missing required fields: priceCents, numPlays, capperUsername' },
         { status: 400 }
       );
     }
 
-    // Find the capper (company owner)
-    const capper = await User.findById(capperUserId);
+    // Find the capper (company owner) - use authenticated user from headers
+    const capper = await User.findOne({ whopUserId: userId, companyId: companyId });
     if (!capper) {
       return NextResponse.json({ error: 'Capper user not found' }, { status: 404 });
     }
