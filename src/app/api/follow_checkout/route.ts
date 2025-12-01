@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
         } catch {
           // Invalid JSON
         }
+        console.error('Invalid webhook signature', error);
         return new Response("Invalid webhook signature", { status: 401 });
       }
       throw error;
