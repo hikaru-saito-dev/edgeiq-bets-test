@@ -121,7 +121,7 @@ export default function ProfileForm() {
     isPremium?: boolean;
   }>>([]);
   const [followOfferEnabled, setFollowOfferEnabled] = useState(false);
-  const [followOfferPriceCents, setFollowOfferPriceCents] = useState<number>(0);
+  const [followOfferPriceDollars, setFollowOfferPriceDollars] = useState<number>(0);
   const [followOfferNumPlays, setFollowOfferNumPlays] = useState<number>(10);
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -197,7 +197,7 @@ export default function ProfileForm() {
       setOnlyNotifyWinningSettlements(profileData.user.onlyNotifyWinningSettlements ?? false);
       setMembershipPlans(profileData.user.membershipPlans || []);
       setFollowOfferEnabled(profileData.user.followOfferEnabled ?? false);
-      setFollowOfferPriceCents(profileData.user.followOfferPriceCents ?? 0);
+      setFollowOfferPriceDollars(profileData.user.followOfferPriceDollars ?? 0);
       setFollowOfferNumPlays(profileData.user.followOfferNumPlays ?? 10);
       setPersonalStats(profileData.personalStats);
       setCompanyStats(profileData.companyStats || null);
@@ -289,7 +289,7 @@ export default function ProfileForm() {
         updateData.followOfferEnabled = followOfferEnabled;
         
         // Handle follow offer settings - create checkout link if enabled with valid settings
-        if (followOfferEnabled && followOfferPriceCents > 0 && followOfferNumPlays > 0) {
+        if (followOfferEnabled && followOfferPriceDollars > 0 && followOfferNumPlays > 0) {
           // Create checkout link when follow offer is enabled
           setCreatingCheckout(true);
           try {
@@ -298,7 +298,7 @@ export default function ProfileForm() {
               userId: userId || undefined,
               companyId: companyId || undefined,
               body: JSON.stringify({
-                priceCents: followOfferPriceCents,
+                priceCents: followOfferPriceDollars * 100,
                 numPlays: followOfferNumPlays,
                 capperUsername: userData?.whopUsername || 'woodiee',
               }),
@@ -1106,10 +1106,10 @@ export default function ProfileForm() {
               fullWidth
               label="Price (in dollars)"
               type="number"
-              value={followOfferPriceCents > 0 ? (followOfferPriceCents / 100).toFixed(2) : ''}
+              value={followOfferPriceDollars > 0 ? followOfferPriceDollars.toFixed(2) : ''}
               onChange={(e) => {
                 const dollars = parseFloat(e.target.value) || 0;
-                setFollowOfferPriceCents(Math.round(dollars * 100));
+                setFollowOfferPriceDollars(dollars);
               }}
               placeholder="10.00"
               margin="normal"
