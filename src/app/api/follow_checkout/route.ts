@@ -88,6 +88,13 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
+      // Handle Base64 decoding errors (common with test webhooks that have malformed signatures)
+      if (error instanceof Error && error.message.includes('Base64Coder')) {
+        return NextResponse.json(
+          { error: 'Invalid webhook signature format' },
+          { status: 401 }
+        );
+      }
       // Handle JSON parsing errors
       if (error instanceof SyntaxError) {
         return NextResponse.json(
