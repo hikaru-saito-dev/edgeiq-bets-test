@@ -3,8 +3,7 @@ import connectDB from '@/lib/db';
 import { User } from '@/models/User';
 import { FollowPurchase } from '@/models/FollowPurchase';
 import { Whop } from '@whop/sdk';
-import type { PaymentSucceededWebhookEvent } from '@whop/sdk/resources/webhooks';
-import { WebhookVerificationError } from 'standardwebhooks';
+import type { Payment } from '@whop/sdk/resources.js';
 
 const WEBHOOK_SECRET = process.env.WHOP_WEBHOOK_SECRET;
 
@@ -12,21 +11,24 @@ if (!WEBHOOK_SECRET) {
   throw new Error('WHOP_WEBHOOK_SECRET environment variable is required');
 }
 
+// Initialize Whop SDK with webhookKey (Base64 encoded)
+const whopSdk = new Whop({
+  appID: process.env.NEXT_PUBLIC_WHOP_APP_ID,
+  apiKey: process.env.WHOP_API_KEY || '',
+  webhookKey: Buffer.from(WEBHOOK_SECRET, 'utf8').toString('base64'),
+});
+
 /**
  * POST /api/follow_checkout
  * Webhook endpoint to receive payment.succeeded events from Whop
  * Creates FollowPurchase records when users purchase follow offers
  */
-// Disable body parsing - we need raw body for signature verification
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    await connectDB();
-
     // Get raw body as string for signature verification
-    // IMPORTANT: Must be the exact raw body, not parsed JSON
     const body = await request.text();
     
     if (!body || body.length === 0) {
@@ -36,108 +38,55 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert Headers to plain object for SDK
-    const headersObj: Record<string, string> = {};
-    request.headers.forEach((value, key) => {
-      headersObj[key] = value;
-    });
+    // Convert headers to plain object for SDK
+    const headers = Object.fromEntries(request.headers);
 
-    // Check if this is a test webhook (missing signature headers)
-    // Test webhooks from Whop don't include webhook-id, webhook-timestamp, webhook-signature
-    const headerKeysLower = Object.keys(headersObj).map(k => k.toLowerCase());
-    const hasSignatureHeaders = 
-      headerKeysLower.includes('webhook-id') &&
-      headerKeysLower.includes('webhook-timestamp') &&
-      headerKeysLower.includes('webhook-signature');
-
-    // Initialize Whop SDK for webhook verification
-    const whopClient = new Whop({
-      apiKey: process.env.WHOP_API_KEY || '',
-    });
-
-    let event: PaymentSucceededWebhookEvent;
-
-    // If signature headers are missing, this is likely a test webhook - parse JSON directly
-    if (!hasSignatureHeaders) {
+    // Validate and unwrap webhook
+    let webhookData;
+    try {
+      webhookData = whopSdk.webhooks.unwrap(body, { headers });
+    } catch (error) {
+      // Handle test webhooks that may not have proper signatures
       try {
         const parsed = JSON.parse(body);
-        
-        // Handle test webhook format: {"action":"payment.succeeded","api_version":"v1","data":null}
         if (parsed.action === 'payment.succeeded' && parsed.data === null) {
-          // Test webhook with null data - just acknowledge it
+          // Test webhook with null data - acknowledge it
           return NextResponse.json({ received: true, test: true }, { status: 200 });
         }
-
-        // If it looks like a real webhook structure, try to use it
-        if (parsed.type === 'payment.succeeded' || parsed.action === 'payment.succeeded') {
-          // For test webhooks, construct a minimal event structure
-          if (!parsed.data) {
-            return NextResponse.json({ received: true, test: true }, { status: 200 });
-          }
-          
-          event = {
-            type: 'payment.succeeded',
-            data: parsed.data,
-          } as PaymentSucceededWebhookEvent;
-        } else {
-          return NextResponse.json({ received: true }, { status: 200 });
-        }
-      } catch (parseError) {
-        return NextResponse.json(
-          { error: 'Invalid JSON payload' },
-          { status: 400 }
-        );
+      } catch {
+        // Invalid JSON or webhook - return error
       }
-    } else {
-      // Real webhook with signature headers - verify and unwrap using SDK
-      try {
-        const unwrapped = whopClient.webhooks.unwrap(body, {
-          headers: headersObj,
-          key: WEBHOOK_SECRET,
-        });
-
-        if (!unwrapped || typeof unwrapped !== 'object') {
-          return NextResponse.json(
-            { error: 'Invalid webhook payload' },
-            { status: 400 }
-          );
-        }
-
-        if (unwrapped.type !== 'payment.succeeded') {
-          return NextResponse.json({ received: true }, { status: 200 });
-        }
-
-        event = unwrapped as PaymentSucceededWebhookEvent;
-        
-        if (!event.data) {
-          return NextResponse.json(
-            { error: 'Invalid event data structure' },
-            { status: 400 }
-          );
-        }
-      } catch (error) {
-        if (error instanceof WebhookVerificationError) {
-          return NextResponse.json(
-            { error: 'Invalid webhook signature' },
-            { status: 401 }
-          );
-        }
-        if (error instanceof SyntaxError) {
-          return NextResponse.json(
-            { error: 'Invalid JSON payload' },
-            { status: 400 }
-          );
-        }
-        throw error;
-      }
+      return NextResponse.json(
+        { error: 'Invalid webhook signature' },
+        { status: 401 }
+      );
     }
 
-    // Extract payment data
-    const payment = event.data;
+    // Handle the webhook event
+    if (webhookData.type === 'payment.succeeded') {
+      // Process payment (fire and forget - return quickly)
+      handlePaymentSucceeded(webhookData.data).catch(() => {
+        // Errors are handled internally
+      });
+      // Return quickly to prevent webhook retries
+      return NextResponse.json({ received: true }, { status: 200 });
+    }
+
+    // Other webhook types - just acknowledge
+    return NextResponse.json({ received: true }, { status: 200 });
+  } catch (error) {
+    // Return 500 so Whop will retry
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+async function handlePaymentSucceeded(payment: Payment) {
+  try {
+    await connectDB();
+
     const planId = payment.plan?.id;
     
     // Check metadata in both payment.metadata and checkout_configuration.metadata
-    // Whop stores checkout metadata in the payment object, but the structure may vary
     const paymentMetadata = (payment.metadata || {}) as {
       followPurchase?: boolean;
       capperUserId?: string;
@@ -145,7 +94,7 @@ export async function POST(request: NextRequest) {
       numPlays?: number;
     };
     
-    // Access checkout_configuration via type assertion since it may exist in the webhook payload
+    // Access checkout_configuration via type assertion
     const paymentWithCheckout = payment as typeof payment & {
       checkout_configuration?: {
         metadata?: {
@@ -168,8 +117,7 @@ export async function POST(request: NextRequest) {
 
     // Check if this is a follow purchase
     if (!metadata.followPurchase || !planId) {
-      // Not a follow purchase, but webhook is valid - return 200
-      return NextResponse.json({ received: true }, { status: 200 });
+      return; // Not a follow purchase
     }
 
     // Extract follow purchase details from metadata
@@ -179,10 +127,7 @@ export async function POST(request: NextRequest) {
     const followerWhopUserId = payment.user?.id;
 
     if (!capperUserId || !capperCompanyId || !followerWhopUserId) {
-      return NextResponse.json(
-        { error: 'Missing required metadata' },
-        { status: 400 }
-      );
+      return; // Missing required metadata
     }
 
     // Check if payment already processed (prevent duplicates)
@@ -191,8 +136,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingPurchase) {
-      // Already processed this payment
-      return NextResponse.json({ received: true, duplicate: true }, { status: 200 });
+      return; // Already processed
     }
 
     // Find follower user by Whop userId and companyId
@@ -202,25 +146,19 @@ export async function POST(request: NextRequest) {
     });
 
     if (!followerUser) {
-      return NextResponse.json({ received: true }, { status: 200 });
+      return; // Follower user not found
     }
 
     // Find capper user
     const capperUser = await User.findById(capperUserId);
 
     if (!capperUser) {
-      return NextResponse.json(
-        { error: 'Capper user not found' },
-        { status: 400 }
-      );
+      return; // Capper user not found
     }
 
     // Verify this plan ID matches the capper's follow offer plan
     if (capperUser.followOfferPlanId !== planId) {
-      return NextResponse.json(
-        { error: 'Plan ID mismatch' },
-        { status: 400 }
-      );
+      return; // Plan ID mismatch
     }
 
     // Create FollowPurchase record
@@ -236,17 +174,8 @@ export async function POST(request: NextRequest) {
     });
 
     await followPurchase.save();
-
-    return NextResponse.json(
-      {
-        success: true,
-        followPurchaseId: followPurchase._id,
-      },
-      { status: 200 }
-    );
   } catch (error) {
-    // Return 500 so Whop will retry
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    // Errors are handled silently - we've already returned 200 to Whop
+    // This prevents webhook retries for non-recoverable errors
   }
 }
-

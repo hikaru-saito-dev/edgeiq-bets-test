@@ -167,7 +167,7 @@ export default function FollowDetailModal({ open, onClose, entry }: FollowDetail
           {/* Description */}
           <Box>
             <Typography variant="body2" sx={{ color: 'var(--text-muted)', lineHeight: 1.6 }}>
-              By confirming, you&apos;ll receive the next <strong>{numPlays}</strong> bets/trades from{' '}
+              By confirming, you&apos;ll receive the next <strong>{numPlays}</strong> bets from{' '}
               <strong>{entry.alias || entry.whopDisplayName}</strong> directly in your Following feed.
             </Typography>
           </Box>
