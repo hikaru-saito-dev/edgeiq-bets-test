@@ -4,6 +4,7 @@ import { User } from '@/models/User';
 import { FollowPurchase } from '@/models/FollowPurchase';
 import { Whop } from '@whop/sdk';
 import type { PaymentSucceededWebhookEvent } from '@whop/sdk/resources/webhooks';
+import { WebhookVerificationError } from 'standardwebhooks';
 
 const WEBHOOK_SECRET = process.env.WHOP_WEBHOOK_SECRET;
 
@@ -25,13 +26,31 @@ export async function POST(request: NextRequest) {
     await connectDB();
 
     // Get raw body as string for signature verification
+    // IMPORTANT: Must be the exact raw body, not parsed JSON
     const body = await request.text();
     
-    // Convert headers to plain object for SDK
+    if (!body || body.length === 0) {
+      return NextResponse.json(
+        { error: 'Empty request body' },
+        { status: 400 }
+      );
+    }
+
+    // Convert Headers to plain object for SDK
+    // standardwebhooks expects lowercase header keys (webhook-id, webhook-timestamp, webhook-signature)
     const headersObj: Record<string, string> = {};
     request.headers.forEach((value, key) => {
-      headersObj[key] = value;
+      // Normalize to lowercase for standardwebhooks compatibility
+      headersObj[key.toLowerCase()] = value;
     });
+
+    // Verify required headers are present (standardwebhooks needs these)
+    if (!headersObj['webhook-id'] || !headersObj['webhook-timestamp'] || !headersObj['webhook-signature']) {
+      return NextResponse.json(
+        { error: 'Missing required webhook headers' },
+        { status: 400 }
+      );
+    }
 
     // Initialize Whop SDK for webhook verification
     const whopClient = new Whop({
@@ -39,6 +58,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Verify and unwrap webhook
+    // The SDK uses standardwebhooks.verify() which throws WebhookVerificationError on failure
     let event: PaymentSucceededWebhookEvent;
     try {
       const unwrapped = whopClient.webhooks.unwrap(body, {
@@ -54,10 +74,15 @@ export async function POST(request: NextRequest) {
 
       event = unwrapped as PaymentSucceededWebhookEvent;
     } catch (error) {
-      return NextResponse.json(
-        { error: 'Invalid webhook signature' },
-        { status: 401 }
-      );
+      // standardwebhooks throws WebhookVerificationError on signature mismatch
+      if (error instanceof WebhookVerificationError) {
+        return NextResponse.json(
+          { error: 'Invalid webhook signature' },
+          { status: 401 }
+        );
+      }
+      // Re-throw other errors
+      throw error;
     }
 
     // Extract payment data
