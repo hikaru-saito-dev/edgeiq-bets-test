@@ -5,13 +5,8 @@ import { User } from '@/models/User';
 export const runtime = 'nodejs';
 
 const WHOP_API_KEY = process.env.WHOP_API_KEY || '';
-const EDGEIQ_COMPANY_ID = process.env.NEXT_PUBLIC_WHOP_COMPANY_ID || ''; // EdgeIQ company ID
+const EDGEIQ_COMPANY_ID = process.env.NEXT_PUBLIC_WHOP_COMPANY_ID || '';
 
-/**
- * POST /api/follow/checkout
- * Creates a checkout configuration/link for follow offer
- * Called when company owner saves their follow offer settings
- */
 export async function POST(request: NextRequest) {
   try {
     await connectDB();
@@ -34,13 +29,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find the capper (company owner) - use authenticated user from headers
     const capper = await User.findOne({ whopUserId: userId, companyId: companyId });
     if (!capper) {
       return NextResponse.json({ error: 'Capper user not found' }, { status: 404 });
     }
 
-    // Only owners/companyOwners can create follow offers
     if (capper.role !== 'companyOwner' && capper.role !== 'owner') {
       return NextResponse.json(
         { error: 'Only company owners can create follow offers' },
@@ -48,7 +41,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create checkout configuration via Whop API
     const checkoutResponse = await fetch(
       'https://api.whop.com/api/v1/checkout_configurations',
       {
@@ -59,7 +51,7 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           plan: {
-            company_id: EDGEIQ_COMPANY_ID, // EdgeIQ company
+            company_id: EDGEIQ_COMPANY_ID,
             initial_price: priceCents,
             plan_type: 'one_time',
             currency: 'usd',
@@ -70,7 +62,7 @@ export async function POST(request: NextRequest) {
             capperCompanyId: capper.companyId || companyId,
             numPlays: numPlays,
           },
-          affiliate_code: capperUsername, // Capper's username for affiliate tracking
+          affiliate_code: capperUsername,
           redirect_url: `${process.env.NEXT_PUBLIC_APP_URL || 'https://edgeiq-bets-test.vercel.app'}/following`,
         }),
       }
@@ -96,12 +88,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Add affiliate param to purchase URL
     const checkoutUrl = new URL(purchaseUrl);
     checkoutUrl.searchParams.set('a', capperUsername);
     const finalCheckoutUrl = checkoutUrl.toString();
 
-    // Update capper's follow offer settings
     capper.followOfferEnabled = true;
     capper.followOfferPriceCents = priceCents;
     capper.followOfferNumPlays = numPlays;
