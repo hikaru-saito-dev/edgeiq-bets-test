@@ -57,6 +57,14 @@ export async function POST(request: NextRequest) {
         key: WEBHOOK_SECRET,
       });
 
+      // Validate unwrapped event structure
+      if (!unwrapped || typeof unwrapped !== 'object') {
+        return NextResponse.json(
+          { error: 'Invalid webhook payload' },
+          { status: 400 }
+        );
+      }
+
       // Type guard to check if it's a payment.succeeded event
       if (unwrapped.type !== 'payment.succeeded') {
         // Not a payment.succeeded event, but webhook is valid - return 200
@@ -64,6 +72,14 @@ export async function POST(request: NextRequest) {
       }
 
       event = unwrapped as PaymentSucceededWebhookEvent;
+      
+      // Validate event has required data structure
+      if (!event.data) {
+        return NextResponse.json(
+          { error: 'Invalid event data structure' },
+          { status: 400 }
+        );
+      }
     } catch (error) {
       // standardwebhooks throws WebhookVerificationError on signature mismatch
       if (error instanceof WebhookVerificationError) {
@@ -72,7 +88,14 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
-      // Re-throw other errors
+      // Handle JSON parsing errors
+      if (error instanceof SyntaxError) {
+        return NextResponse.json(
+          { error: 'Invalid JSON payload' },
+          { status: 400 }
+        );
+      }
+      // Re-throw other errors to be caught by outer catch
       throw error;
     }
 
@@ -189,10 +212,9 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('Error processing webhook:', error);  
+    // Return 500 so Whop will retry
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
