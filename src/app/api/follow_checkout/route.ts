@@ -72,7 +72,12 @@ export async function POST(request: NextRequest) {
       }
 
       event = unwrapped as PaymentSucceededWebhookEvent;
+
       console.error('Error processing webhook:', event);
+      return NextResponse.json(
+        { error: 'Error processing webhook:', event },
+        { status: 400 }
+      );
       
       // Validate event has required data structure
       if (!event.data) {
