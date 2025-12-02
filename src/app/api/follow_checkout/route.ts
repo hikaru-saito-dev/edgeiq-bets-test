@@ -1,11 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import { WebhookVerificationError } from 'standardwebhooks';
+import crypto from 'crypto';
 import connectDB from '@/lib/db';
 import { User } from '@/models/User';
 import { FollowPurchase } from '@/models/FollowPurchase';
-import { Whop } from '@whop/sdk';
-import type { Payment } from '@whop/sdk/resources.js';
 
 const WEBHOOK_SECRET = process.env.WHOP_WEBHOOK_SECRET;
 
@@ -13,104 +11,164 @@ if (!WEBHOOK_SECRET) {
   throw new Error('WHOP_WEBHOOK_SECRET environment variable is required');
 }
 
-const whopSdk = new Whop({
-  appID: process.env.NEXT_PUBLIC_WHOP_APP_ID,
-  apiKey: process.env.WHOP_API_KEY || '',
-  webhookKey: btoa(WEBHOOK_SECRET), // Base64 encode the raw webhook secret
-});
-
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function POST(request: NextRequest) {
+interface WhopWebhookPayload {
+  data: {
+    id: string;
+    user_id: string;
+    plan_id: string;
+    company_id: string;
+    status: string;
+    metadata?: {
+      followPurchase?: boolean;
+      capperUserId?: string;
+      capperCompanyId?: string;
+      numPlays?: number | string;
+    };
+  };
+  api_version: string;
+  action: string;
+}
+
+/**
+ * Verify Whop webhook signature
+ * Format: x-whop-signature: t=timestamp,v1=signature
+ */
+function verifyWhopSignature(
+  payload: string,
+  signature: string,
+  secret: string
+): boolean {
   try {
-    const requestBodyText = await request.text();
+    // Parse signature: t=timestamp,v1=signature
+    const parts = signature.split(',');
+    const timestampPart = parts.find((p) => p.startsWith('t='));
+    const signaturePart = parts.find((p) => p.startsWith('v1='));
 
-    if (!requestBodyText || requestBodyText.length === 0) {
-      return NextResponse.json({ error: "Empty request body" }, { status: 400 });
+    if (!timestampPart || !signaturePart) {
+      return false;
     }
 
-    // Build headers object for verification
-    const headers: Record<string, string> = {};
-    request.headers.forEach((value, key) => {
-      headers[key] = value;
-    });
+    const timestamp = timestampPart.split('=')[1];
+    const receivedSignature = signaturePart.split('=')[1];
 
-    // Unwrap and verify webhook signature
-    let webhookData;
-    try {
-      webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
-    } catch (error) {
-      if (error instanceof WebhookVerificationError) {
-        console.error('Webhook verification failed - likely invalid webhook secret or signature mismatch');
-        return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
-      }
-      console.error('Webhook unwrap error:', error instanceof Error ? error.message : String(error));
-      console.error('This usually means WHOP_WEBHOOK_SECRET is invalid or not a valid Base64 string');
-      return NextResponse.json({ error: "Internal server error" }, { status: 500 });
-    }
+    // Create signed payload: timestamp.payload
+    const signedPayload = `${timestamp}.${payload}`;
 
-    // Handle payment succeeded webhooks
-    if (webhookData.type === "payment.succeeded") {
-      waitUntil(handlePaymentSucceeded(webhookData.data));
-    }
+    // Compute HMAC SHA256
+    const hmac = crypto.createHmac('sha256', secret);
+    hmac.update(signedPayload);
+    const computedSignature = hmac.digest('hex');
 
-    return NextResponse.json({ success: true }, { status: 200 });
+    // Compare signatures using timing-safe comparison
+    return crypto.timingSafeEqual(
+      Buffer.from(receivedSignature, 'hex'),
+      Buffer.from(computedSignature, 'hex')
+    );
   } catch (error) {
-    console.error('POST handler error:', error instanceof Error ? error.message : error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return false;
   }
 }
 
-async function handlePaymentSucceeded(payment: Payment) {
+/**
+ * Webhook handler for Whop payment events
+ * Handles app-level webhooks with x-whop-signature header
+ */
+export async function POST(request: NextRequest): Promise<Response> {
+  try {
+    // Get raw request body as text (required for signature verification)
+    const requestBodyText = await request.text();
+
+    if (!requestBodyText || requestBodyText.length === 0) {
+      return new Response('Empty request body', { status: 400 });
+    }
+
+    // Get signature header
+    const signature = request.headers.get('x-whop-signature');
+
+    if (!signature) {
+      return new Response('Missing x-whop-signature header', { status: 401 });
+    }
+
+    // Verify webhook signature
+    const isValidSignature = verifyWhopSignature(
+      requestBodyText,
+      signature,
+      WEBHOOK_SECRET || ''
+    );
+
+    if (!isValidSignature) {
+      return new Response('Invalid webhook signature', { status: 401 });
+    }
+
+    // Parse webhook payload
+    let webhookPayload: WhopWebhookPayload;
+    try {
+      webhookPayload = JSON.parse(requestBodyText) as WhopWebhookPayload;
+    } catch (error) {
+      return new Response('Invalid JSON payload', { status: 400 });
+    }
+
+    // Handle app_payment.succeeded events
+    if (webhookPayload.action === 'app_payment.succeeded') {
+      waitUntil(handlePaymentSucceeded(webhookPayload.data));
+    }
+
+    // Return 200 OK quickly to prevent webhook retries
+    return new Response('OK', { status: 200 });
+  } catch (error) {
+    return new Response('Internal server error', { status: 500 });
+  }
+}
+
+/**
+ * Process payment succeeded webhook
+ * Runs asynchronously via waitUntil to avoid blocking the response
+ */
+async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): Promise<void> {
   try {
     await connectDB();
 
-    const planId = payment.plan?.id;
+    const planId = paymentData.plan_id;
+    if (!planId) {
+      return;
+    }
 
-    // Extract metadata from payment
-    const paymentMetadata = (payment.metadata || {}) as {
-      followPurchase?: boolean;
-      capperUserId?: string;
-      capperCompanyId?: string;
-      numPlays?: number;
-    };
-
-    const checkoutMetadata = ((payment as unknown as Record<string, unknown>).checkout_configuration as Record<string, unknown> | undefined)?.metadata || {};
-
-    const checkoutMetadataTyped = checkoutMetadata as {
-      followPurchase?: boolean;
-      capperUserId?: string;
-      capperCompanyId?: string;
-      numPlays?: number;
-    };
-
-    const metadata = { ...checkoutMetadataTyped, ...paymentMetadata };
+    // Extract metadata from payment data
+    const metadata = paymentData.metadata || {};
 
     // Only process follow purchase webhooks
-    if (!metadata.followPurchase || !planId) {
+    if (!metadata.followPurchase) {
       return;
     }
 
     const capperUserId = metadata.capperUserId;
-    const capperCompanyId = metadata.capperCompanyId || payment.company?.id;
-    const numPlays = metadata.numPlays || 10;
-    const followerWhopUserId = payment.user?.id;
+    const capperCompanyId = metadata.capperCompanyId || paymentData.company_id;
+    // Handle numPlays as either number or string
+    const numPlays =
+      typeof metadata.numPlays === 'string'
+        ? parseInt(metadata.numPlays, 10)
+        : metadata.numPlays || 10;
+    const followerWhopUserId = paymentData.user_id;
+    const paymentId = paymentData.id;
 
-    if (!capperUserId || !capperCompanyId || !followerWhopUserId) {
+    // Validate required fields
+    if (!capperUserId || !capperCompanyId || !followerWhopUserId || !paymentId) {
       return;
     }
 
-    // Check if we already processed this payment
+    // Check if we already processed this payment (prevent duplicates)
     const existingPurchase = await FollowPurchase.findOne({
-      paymentId: payment.id,
+      paymentId: paymentId,
     });
 
     if (existingPurchase) {
       return;
     }
 
-    // Find the follower user
+    // Find the follower user (the person who purchased)
     const followerUser = await User.findOne({
       whopUserId: followerWhopUserId,
       companyId: capperCompanyId,
@@ -120,14 +178,14 @@ async function handlePaymentSucceeded(payment: Payment) {
       return;
     }
 
-    // Find the capper (content creator)
+    // Find the capper (content creator being followed)
     const capperUser = await User.findById(capperUserId);
 
     if (!capperUser) {
       return;
     }
 
-    // Verify plan ID matches
+    // Verify plan ID matches the capper's current follow offer plan
     if (capperUser.followOfferPlanId !== planId) {
       return;
     }
@@ -141,11 +199,12 @@ async function handlePaymentSucceeded(payment: Payment) {
       numPlaysConsumed: 0,
       status: 'active',
       planId: planId,
-      paymentId: payment.id,
+      paymentId: paymentId,
     });
 
     await followPurchase.save();
   } catch (error) {
-    console.error('Payment webhook processing error:', error instanceof Error ? error.message : String(error));
+    // Silently handle errors in async function
+    // Errors are logged but don't affect webhook response
   }
 }
