@@ -122,6 +122,7 @@ export default function ProfileForm() {
   }>>([]);
   const [followOfferEnabled, setFollowOfferEnabled] = useState(false);
   const [followOfferPriceDollars, setFollowOfferPriceDollars] = useState<number>(0);
+  const [priceInputValue, setPriceInputValue] = useState<string>('');
   const [followOfferNumPlays, setFollowOfferNumPlays] = useState<number>(10);
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -197,7 +198,9 @@ export default function ProfileForm() {
       setOnlyNotifyWinningSettlements(profileData.user.onlyNotifyWinningSettlements ?? false);
       setMembershipPlans(profileData.user.membershipPlans || []);
       setFollowOfferEnabled(profileData.user.followOfferEnabled ?? false);
-      setFollowOfferPriceDollars(profileData.user.followOfferPriceCents ?? 0);
+      const priceValue = profileData.user.followOfferPriceCents ?? 0;
+      setFollowOfferPriceDollars(priceValue);
+      setPriceInputValue(priceValue > 0 ? priceValue.toString() : '');
       setFollowOfferNumPlays(profileData.user.followOfferNumPlays ?? 10);
       setPersonalStats(profileData.personalStats);
       setCompanyStats(profileData.companyStats || null);
@@ -1106,16 +1109,35 @@ export default function ProfileForm() {
               fullWidth
               label="Price (in dollars)"
               type="number"
-              value={followOfferPriceDollars || ''}
+              value={priceInputValue}
               onChange={(e) => {
                 const value = e.target.value;
-                if (value === '' || value === '.') {
+                setPriceInputValue(value);
+                // Parse and update the numeric value for validation
+                if (value === '') {
                   setFollowOfferPriceDollars(0);
-                  return;
+                } else {
+                  const numValue = parseFloat(value);
+                  if (!isNaN(numValue) && numValue >= 0) {
+                    setFollowOfferPriceDollars(numValue);
+                  }
                 }
-                const dollars = parseFloat(value);
-                if (!isNaN(dollars) && dollars >= 0) {
-                  setFollowOfferPriceDollars(dollars);
+              }}
+              onBlur={(e) => {
+                // Format on blur - ensure valid number
+                const value = e.target.value;
+                if (value === '' || value === '.') {
+                  setPriceInputValue('');
+                  setFollowOfferPriceDollars(0);
+                } else {
+                  const numValue = parseFloat(value);
+                  if (!isNaN(numValue) && numValue >= 0) {
+                    setPriceInputValue(numValue.toString());
+                    setFollowOfferPriceDollars(numValue);
+                  } else {
+                    // Reset to previous valid value
+                    setPriceInputValue(followOfferPriceDollars > 0 ? followOfferPriceDollars.toString() : '');
+                  }
                 }
               }}
               placeholder="10.00"
