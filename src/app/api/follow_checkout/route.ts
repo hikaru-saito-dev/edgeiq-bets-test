@@ -124,8 +124,12 @@ export async function POST(request: NextRequest): Promise<Response> {
       fullPayload: JSON.stringify(webhookPayload, null, 2),
     });
 
-    // Handle app_payment.succeeded events
-    if (webhookPayload.action === 'app_payment.succeeded') {
+    // Handle payment succeeded events
+    // Whop can send either "payment.succeeded" or "app_payment.succeeded"
+    if (
+      webhookPayload.action === 'payment.succeeded' ||
+      webhookPayload.action === 'app_payment.succeeded'
+    ) {
       // Process async and capture result for logging
       const resultPromise = handlePaymentSucceeded(webhookPayload.data);
       waitUntil(resultPromise);
