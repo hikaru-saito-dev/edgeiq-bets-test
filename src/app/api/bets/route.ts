@@ -196,14 +196,14 @@ export async function GET(request: NextRequest) {
     if (search) {
       const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       searchConditions.push(
-        { eventName: regex },
-        { sport: regex },
-        { league: regex },
-        { homeTeam: regex },
-        { awayTeam: regex },
-        { selection: regex },
-        { marketType: regex },
-        { book: regex },
+          { eventName: regex },
+          { sport: regex },
+          { league: regex },
+          { homeTeam: regex },
+          { awayTeam: regex },
+          { selection: regex },
+          { marketType: regex },
+          { book: regex },
         { notes: regex }
       );
     }
