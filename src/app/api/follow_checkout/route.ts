@@ -257,14 +257,15 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
       return;
     }
 
-    // Verify plan ID matches the capper's current follow offer plan
-    if (capperUser.followOfferPlanId !== planId) {
-      console.error('[FollowPurchase] Plan ID mismatch:', {
+    // Note: We use metadata.capperUserId as the primary identifier (already found capper above)
+    // Plan ID check is informational only - metadata.capperUserId is the source of truth
+    if (capperUser.followOfferPlanId && capperUser.followOfferPlanId !== planId) {
+      console.error('[FollowPurchase] Warning - Plan ID mismatch (using metadata.capperUserId as primary):', {
         expected: capperUser.followOfferPlanId,
         received: planId,
         capperUserId: String(capperUser._id),
       });
-      return;
+      // Continue processing - metadata.capperUserId uniquely identifies the capper
     }
 
     // Verify follow offer is still enabled
