@@ -182,7 +182,6 @@ export async function GET(request: NextRequest) {
     // Build match query - ALL users see only their own bets
     const matchQuery: Record<string, unknown> = {
       userId: user._id,
-      companyId: companyId,
       parlayId: { $exists: false }, // Exclude parlay legs from top-level listing
     };
 
@@ -226,7 +225,6 @@ export async function GET(request: NextRequest) {
                   $and: [
                     { $eq: ['$parlayId', '$$parlayBetId'] },
                     { $eq: ['$userId', user._id] },
-                    { $eq: ['$companyId', companyId] },
                   ],
                 },
               },
@@ -410,7 +408,6 @@ export async function POST(request: NextRequest) {
         units: validatedLegacy.units,
         result: 'pending' as const,
         locked,
-        companyId: finalCompanyId,
         eventName: validatedLegacy.eventName,
         odds: validatedLegacy.odds,
         oddsFormat: 'decimal' as const,
@@ -494,7 +491,6 @@ export async function POST(request: NextRequest) {
         units: validatedNew.units,
         result: 'pending' as const,
         locked,
-        companyId: finalCompanyId,
         eventName: validatedNew.eventName,
         sport: validatedNew.game.sport,
         sportKey: validatedNew.game.sportKey, // Store sportKey for auto-settlement
@@ -804,7 +800,6 @@ export async function POST(request: NextRequest) {
             oddsFormat: 'decimal' as const,
             result: 'pending' as const,
             locked: lockedLeg,
-            companyId: finalCompanyId,
             eventName,
             sport: legGame.sport,
             sportKey: legGame.sportKey,
@@ -863,7 +858,6 @@ export async function POST(request: NextRequest) {
             oddsFormat: 'decimal' as const,
             result: 'pending' as const,
             locked: new Date() >= validatedNew.game.startTime,
-            companyId: finalCompanyId,
             eventName: validatedNew.eventName,
             sport: validatedNew.game.sport,
             sportKey: validatedNew.game.sportKey,
@@ -965,7 +959,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'betId is required' }, { status: 400 });
     }
 
-    const bet = await Bet.findOne({ _id: betId, userId: user._id, companyId: companyId });
+    const bet = await Bet.findOne({ _id: betId, userId: user._id });
     if (!bet) {
       return NextResponse.json({ error: 'Bet not found' }, { status: 404 });
     }

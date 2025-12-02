@@ -117,7 +117,8 @@ export async function updateUserStats(userId: string, bets: IBet[]): Promise<voi
  * This avoids fetching all bets into memory
  */
 export async function updateUserStatsFromAggregation(userId: string, companyId: string): Promise<void> {
-
+  // Note: companyId parameter is kept for backward compatibility but no longer used in bet queries
+  // since bets are no longer company-scoped
 
   const userIdObj = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
 
@@ -125,7 +126,6 @@ export async function updateUserStatsFromAggregation(userId: string, companyId: 
     {
       $match: {
         userId: userIdObj,
-        companyId: companyId,
         parlayId: { $exists: false },
         result: { $ne: 'pending' },
       },

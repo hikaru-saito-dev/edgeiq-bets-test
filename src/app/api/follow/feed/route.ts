@@ -144,23 +144,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Step 5: Build bet query conditions for ALL cappers across ALL companies (single query using $or)
+    // Step 5: Build bet query conditions for ALL cappers (single query using $or)
+    // Since bets are no longer company-scoped, we only need userId and createdAt
     const betOrConditions: Array<{
       userId: mongoose.Types.ObjectId;
-      companyId: string;
       createdAt: { $gte: Date };
     }> = [];
+
+    // Collect unique userIds from all capper users (across all companies)
+    const uniqueCapperUserIds = new Set<string>();
 
     for (const [capperWhopUserId, metadata] of followMetadata.entries()) {
       const capperUsers = capperUserMap.get(capperWhopUserId);
       if (!capperUsers) continue;
 
       for (const capperUser of capperUsers) {
-        betOrConditions.push({
-          userId: capperUser._id,
-          companyId: capperUser.companyId,
-          createdAt: { $gte: metadata.createdAt },
-        });
+        const userIdStr = String(capperUser._id);
+        if (!uniqueCapperUserIds.has(userIdStr)) {
+          uniqueCapperUserIds.add(userIdStr);
+          betOrConditions.push({
+            userId: capperUser._id,
+            createdAt: { $gte: metadata.createdAt },
+          });
+        }
       }
     }
 
@@ -182,7 +188,6 @@ export async function GET(request: NextRequest) {
         $match: {
           $or: betOrConditions.map(condition => ({
             userId: new mongoose.Types.ObjectId(condition.userId),
-            companyId: condition.companyId,
             createdAt: condition.createdAt,
           })),
           parlayId: { $exists: false },

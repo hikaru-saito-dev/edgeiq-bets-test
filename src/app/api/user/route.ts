@@ -66,7 +66,8 @@ const updateUserSchema = z.object({
  * Calculate stats using aggregation pipeline for personal bets
  */
 async function calculatePersonalStatsAggregation(userId: string, companyId: string): Promise<ReturnType<typeof calculateStatsFromAggregation>> {
-  const cacheKey = `personal:${userId}:${companyId}`;
+  // Cache key now only uses userId since bets are not company-scoped
+  const cacheKey = `personal:${userId}`;
   const cached = getPersonalStatsCache(cacheKey);
   if (cached) {
     recordCacheMetric('personalStats', true);
@@ -83,7 +84,6 @@ async function calculatePersonalStatsAggregation(userId: string, companyId: stri
     {
       $match: {
         userId: userIdObj,
-        companyId: companyId,
         parlayId: { $exists: false },
         result: { $ne: 'pending' },
       },
@@ -213,7 +213,6 @@ async function calculateCompanyStatsAggregation(companyUserIds: string[], compan
     {
       $match: {
         userId: { $in: companyUserIdsObj },
-        companyId: companyId,
         parlayId: { $exists: false },
         result: { $ne: 'pending' },
       },

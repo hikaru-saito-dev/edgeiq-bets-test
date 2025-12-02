@@ -80,15 +80,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Bet not found' }, { status: 404 });
     }
 
-    // Use companyId from headers (from context) or fall back to user's companyId
-    const finalCompanyId = companyId || followerUser.companyId;
-    
-    if (!finalCompanyId) {
-      return NextResponse.json({ 
-        error: 'Company ID is required. Please ensure you are accessing the app through a Whop company.' 
-      }, { status: 400 });
-    }
-
     let followedBetId: mongoose.Types.ObjectId | undefined;
 
     if (action === 'follow') {
@@ -100,7 +91,6 @@ export async function POST(request: NextRequest) {
         units: originalBet.units,
         result: 'pending' as const,
         locked: originalBet.locked,
-        companyId: finalCompanyId,
         eventName: originalBet.eventName,
         sport: originalBet.sport,
         league: originalBet.league,
@@ -148,7 +138,6 @@ export async function POST(request: NextRequest) {
               units: leg.units,
               result: 'pending' as const,
               locked: leg.locked,
-              companyId: finalCompanyId,
               eventName: leg.eventName,
               sport: leg.sport,
               league: leg.league,

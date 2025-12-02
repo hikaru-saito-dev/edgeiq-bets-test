@@ -146,20 +146,15 @@ export async function GET(request: NextRequest) {
       {
         $lookup: {
           from: Bet.collection.name,
-          let: { companyId: '$companyId', userIds: '$companyUserIds' },
+          let: { userIds: '$companyUserIds' },
           pipeline: [
             {
               $match: {
                 $expr: {
-                  $and: [
-                    { $eq: ['$companyId', '$$companyId'] },
-                    {
-                      $cond: [
-                        { $gt: [{ $size: '$$userIds' }, 0] },
-                        { $in: ['$userId', '$$userIds'] },
-                        false,
-                      ],
-                    },
+                  $cond: [
+                    { $gt: [{ $size: '$$userIds' }, 0] },
+                    { $in: ['$userId', '$$userIds'] },
+                    false,
                   ],
                 },
                 parlayId: { $exists: false }, // Exclude parlay legs

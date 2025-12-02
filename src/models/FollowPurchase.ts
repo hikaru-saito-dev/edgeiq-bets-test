@@ -5,7 +5,7 @@ export interface IFollowPurchase extends Document {
   capperUserId: Types.ObjectId; // Creator/company owner being followed (MongoDB ID, for reference)
   followerWhopUserId: string; // Whop user ID of follower (person-level tracking)
   capperWhopUserId: string; // Whop user ID of capper (person-level tracking)
-  companyId: string; // Company ID (capper's company, for bet queries)
+  companyId: string; // Company ID (capper's company, for tracking/filtering follows by company)
   numPlaysPurchased: number; // Number of plays user paid for
   numPlaysConsumed: number; // Number of plays already delivered
   status: 'active' | 'completed'; // active = still has plays remaining, completed = all plays delivered

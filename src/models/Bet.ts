@@ -47,7 +47,6 @@ export interface IBet extends Document {
   selectedWebhookIds?: string[]; // IDs of all selected webhooks for notifications
   
   // System Fields
-  companyId?: string; // Whop company ID (BizId)
   parlayId?: Types.ObjectId; // Reference to main parlay bet (for parlay line bets)
   
   // Status
@@ -109,7 +108,6 @@ const BetSchema = new Schema<IBet>({
   },
   
   // System Fields
-  companyId: { type: String, index: true },
   parlayId: { type: Schema.Types.ObjectId, ref: 'Bet', index: true }, // Reference to main parlay bet
   
   // Status
@@ -128,9 +126,7 @@ const BetSchema = new Schema<IBet>({
 BetSchema.index({ userId: 1, createdAt: -1 });
 BetSchema.index({ userId: 1, result: 1 });
 BetSchema.index({ userId: 1, result: 1, createdAt: -1 }); // For stats aggregation
-BetSchema.index({ userId: 1, companyId: 1, parlayId: 1, result: 1 }); // For personal stats aggregation
-BetSchema.index({ companyId: 1, result: 1, createdAt: -1 }); // For company stats aggregation
-BetSchema.index({ companyId: 1, parlayId: 1, result: 1 }); // For leaderboard aggregation
+BetSchema.index({ userId: 1, parlayId: 1, result: 1 }); // For personal stats aggregation
 BetSchema.index({ result: 1, createdAt: -1 }); // For leaderboard filtering
 BetSchema.index({ startTime: 1, locked: 1 });
 
