@@ -6,7 +6,7 @@ import { settleBet } from '@/lib/settleBet';
 import { Log } from '@/models/Log';
 import { Bet, type IBet } from '@/models/Bet';
 import { User } from '@/models/User';
-import { updateUserStats } from '@/lib/stats';
+import { updateUserStatsFromAggregation } from '@/lib/stats';
 
 export const runtime = 'nodejs';
 
@@ -75,9 +75,8 @@ export async function POST(request: NextRequest) {
             const parlayUser = await User.findById(parlayBet.userId);
             await notifyBetSettled(parlayBet as unknown as IBet, parlayResult, parlayUser ?? undefined);
 
-            if (parlayUser) {
-              const allParlayBets = await Bet.find({ userId: parlayBet.userId }).lean();
-              await updateUserStats(parlayBet.userId.toString(), allParlayBets as unknown as IBet[]);
+            if (parlayUser && parlayUser.whopUserId) {
+              await updateUserStatsFromAggregation(parlayUser.whopUserId, '');
             }
           }
         }
@@ -87,9 +86,8 @@ export async function POST(request: NextRequest) {
     }
 
     const user = await User.findById(bet.userId);
-    if (user) {
-      const allBets = await Bet.find({ userId: bet.userId }).lean();
-      await updateUserStats(bet.userId.toString(), allBets as unknown as IBet[]);
+    if (user && user.whopUserId) {
+      await updateUserStatsFromAggregation(user.whopUserId, '');
     }
 
     await Log.create({
@@ -197,15 +195,23 @@ export async function PUT() {
       }
     }
 
-    const affectedUserIds = [
-      ...new Set(
-        [...pendingBets, ...pendingParlays].map((b) => b.userId.toString()),
-      ),
-    ];
-    for (const userId of affectedUserIds) {
+    // Collect unique whopUserIds from affected bets
+    const affectedWhopUserIds = new Set<string>();
+    for (const bet of [...pendingBets, ...pendingParlays]) {
       try {
-        const allBets = await Bet.find({ userId }).lean();
-        await updateUserStats(userId, allBets as unknown as IBet[]);
+        const user = await User.findById(bet.userId);
+        if (user && user.whopUserId) {
+          affectedWhopUserIds.add(user.whopUserId);
+        }
+      } catch {
+        // Skip if user lookup fails
+      }
+    }
+    
+    // Update stats for each unique whopUserId (aggregates across all companies)
+    for (const whopUserId of affectedWhopUserIds) {
+      try {
+        await updateUserStatsFromAggregation(whopUserId, '');
       } catch {
         // Error updating stats - continue silently
       }

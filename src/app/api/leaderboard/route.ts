@@ -131,29 +131,29 @@ export async function GET(request: NextRequest) {
                 },
               },
             },
-            { $project: { _id: 1 } },
+            { $project: { _id: 1, whopUserId: 1 } },
           ],
           as: 'companyUsers',
         },
       },
       {
         $addFields: {
-          companyUserIds: {
-            $map: { input: '$companyUsers', as: 'u', in: '$$u._id' },
+          companyWhopUserIds: {
+            $map: { input: '$companyUsers', as: 'u', in: '$$u.whopUserId' },
           },
         },
       },
       {
         $lookup: {
           from: Bet.collection.name,
-          let: { userIds: '$companyUserIds' },
+          let: { whopUserIds: '$companyWhopUserIds' },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $cond: [
-                    { $gt: [{ $size: '$$userIds' }, 0] },
-                    { $in: ['$userId', '$$userIds'] },
+                    { $gt: [{ $size: '$$whopUserIds' }, 0] },
+                    { $in: ['$whopUserId', '$$whopUserIds'] },
                     false,
                   ],
                 },

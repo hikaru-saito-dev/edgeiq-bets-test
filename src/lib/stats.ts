@@ -116,16 +116,14 @@ export async function updateUserStats(userId: string, bets: IBet[]): Promise<voi
  * Update user stats using MongoDB aggregation (optimized version)
  * This avoids fetching all bets into memory
  */
-export async function updateUserStatsFromAggregation(userId: string, companyId: string): Promise<void> {
+export async function updateUserStatsFromAggregation(whopUserId: string, companyId: string): Promise<void> {
   // Note: companyId parameter is kept for backward compatibility but no longer used in bet queries
   // since bets are no longer company-scoped
-
-  const userIdObj = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
 
   const pipeline: PipelineStage[] = [
     {
       $match: {
-        userId: userIdObj,
+        whopUserId: whopUserId,
         parlayId: { $exists: false },
         result: { $ne: 'pending' },
       },
@@ -211,15 +209,19 @@ export async function updateUserStatsFromAggregation(userId: string, companyId: 
 
   const streaks = aggregationStreakFunction(aggResult.betOutcomes || []);
 
-  await User.findByIdAndUpdate(userId, {
-    $set: {
-      'stats.winRate': Math.round(aggResult.winRate * 100) / 100,
-      'stats.roi': Math.round(aggResult.roi * 100) / 100,
-      'stats.unitsPL': Math.round(aggResult.unitsPL * 100) / 100,
-      'stats.currentStreak': streaks.current,
-      'stats.longestStreak': streaks.longest,
-    },
-  });
+  // Update all user records with this whopUserId (across all companies)
+  await User.updateMany(
+    { whopUserId: whopUserId },
+    {
+      $set: {
+        'stats.winRate': Math.round(aggResult.winRate * 100) / 100,
+        'stats.roi': Math.round(aggResult.roi * 100) / 100,
+        'stats.unitsPL': Math.round(aggResult.unitsPL * 100) / 100,
+        'stats.currentStreak': streaks.current,
+        'stats.longestStreak': streaks.longest,
+      },
+    }
+  );
 }
 
 /**

@@ -65,9 +65,9 @@ const updateUserSchema = z.object({
 /**
  * Calculate stats using aggregation pipeline for personal bets
  */
-async function calculatePersonalStatsAggregation(userId: string, companyId: string): Promise<ReturnType<typeof calculateStatsFromAggregation>> {
-  // Cache key now only uses userId since bets are not company-scoped
-  const cacheKey = `personal:${userId}`;
+async function calculatePersonalStatsAggregation(whopUserId: string, companyId: string): Promise<ReturnType<typeof calculateStatsFromAggregation>> {
+  // Cache key uses whopUserId for cross-company aggregation
+  const cacheKey = `personal:${whopUserId}`;
   const cached = getPersonalStatsCache(cacheKey);
   if (cached) {
     recordCacheMetric('personalStats', true);
@@ -76,14 +76,10 @@ async function calculatePersonalStatsAggregation(userId: string, companyId: stri
 
   const startTime = performance.now();
 
-  // Import mongoose to convert string to ObjectId
-  const mongoose = await import('mongoose');
-  const userIdObj = typeof userId === 'string' ? new mongoose.Types.ObjectId(userId) : userId;
-
   const pipeline: PipelineStage[] = [
     {
       $match: {
-        userId: userIdObj,
+        whopUserId: whopUserId,
         parlayId: { $exists: false },
         result: { $ne: 'pending' },
       },
@@ -195,8 +191,8 @@ async function calculatePersonalStatsAggregation(userId: string, companyId: stri
 /**
  * Calculate stats using aggregation pipeline for company bets
  */
-async function calculateCompanyStatsAggregation(companyUserIds: string[], companyId: string): Promise<ReturnType<typeof calculateStatsFromAggregation>> {
-  const cacheKey = `company:${companyId}:${companyUserIds.join(',')}`;
+async function calculateCompanyStatsAggregation(companyWhopUserIds: string[], companyId: string): Promise<ReturnType<typeof calculateStatsFromAggregation>> {
+  const cacheKey = `company:${companyId}:${companyWhopUserIds.join(',')}`;
   const cached = getCompanyStatsCache(cacheKey);
   if (cached) {
     recordCacheMetric('companyStats', true);
@@ -205,14 +201,10 @@ async function calculateCompanyStatsAggregation(companyUserIds: string[], compan
 
   const startTime = performance.now();
 
-  // Convert string IDs to ObjectIds
-  const mongoose = await import('mongoose');
-  const companyUserIdsObj = companyUserIds.map(id => new mongoose.Types.ObjectId(id));
-
   const pipeline: PipelineStage[] = [
     {
       $match: {
-        userId: { $in: companyUserIdsObj },
+        whopUserId: { $in: companyWhopUserIds },
         parlayId: { $exists: false },
         result: { $ne: 'pending' },
       },
@@ -345,7 +337,7 @@ export async function GET() {
     }
 
     // Calculate personal stats using aggregation
-    const personalStats = await calculatePersonalStatsAggregation(String(user._id), companyId || '');
+    const personalStats = await calculatePersonalStatsAggregation(user.whopUserId, companyId || '');
 
     // Auto-fetch company name from Whop if not set
     if (user.companyId && !user.companyName) {
@@ -369,11 +361,11 @@ export async function GET() {
       const companyUsers = await User.find({ 
         companyId: user.companyId,
         role: { $in: ['companyOwner', 'owner', 'admin'] }
-      }).select('_id');
-      const companyUserIds = companyUsers.map(u => String(u._id));
+      }).select('whopUserId');
+      const companyWhopUserIds = companyUsers.map(u => u.whopUserId).filter((id): id is string => !!id);
       
       // Calculate company stats using aggregation
-      companyStats = await calculateCompanyStatsAggregation(companyUserIds, companyId || '');
+      companyStats = await calculateCompanyStatsAggregation(companyWhopUserIds, companyId || '');
     }
 
     return NextResponse.json({

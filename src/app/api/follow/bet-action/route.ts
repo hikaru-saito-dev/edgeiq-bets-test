@@ -87,6 +87,7 @@ export async function POST(request: NextRequest) {
       // Exclude system fields that should be new for the follower's bet
       const betData: Partial<IBet> = {
         userId: followerUser._id,
+        whopUserId: followerUser.whopUserId,
         startTime: originalBet.startTime,
         units: originalBet.units,
         result: 'pending' as const,
@@ -134,6 +135,7 @@ export async function POST(request: NextRequest) {
           parlayLegs.map(async (leg) => {
             const legData: Partial<IBet> = {
               userId: followerUser._id,
+              whopUserId: followerUser.whopUserId,
               startTime: leg.startTime,
               units: leg.units,
               result: 'pending' as const,

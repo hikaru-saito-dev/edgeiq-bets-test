@@ -404,6 +404,7 @@ export async function POST(request: NextRequest) {
       
       betData = {
         userId: user._id,
+        whopUserId: user.whopUserId,
         startTime,
         units: validatedLegacy.units,
         result: 'pending' as const,
@@ -487,6 +488,7 @@ export async function POST(request: NextRequest) {
       
       betData = {
         userId: user._id,
+        whopUserId: user.whopUserId,
         startTime,
         units: validatedNew.units,
         result: 'pending' as const,
@@ -794,6 +796,7 @@ export async function POST(request: NextRequest) {
 
           const lineBetData: Record<string, unknown> = {
             userId: user._id,
+            whopUserId: user.whopUserId,
             startTime: legStart,
             units: 0.01,
             odds: 1.01,
@@ -852,6 +855,7 @@ export async function POST(request: NextRequest) {
         for (const line of parsedLines) {
           const lineBetData: Record<string, unknown> = {
             userId: user._id,
+            whopUserId: user.whopUserId,
             startTime: validatedNew.game.startTime,
             units: 0.01,
             odds: 1.01,
@@ -992,7 +996,7 @@ export async function DELETE(request: NextRequest) {
 
     // Recalculate stats using aggregation (optimized)
     const { updateUserStatsFromAggregation } = await import('@/lib/stats');
-    await updateUserStatsFromAggregation(user._id.toString(), companyId || '');
+    await updateUserStatsFromAggregation(user.whopUserId, companyId || '');
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -6,7 +6,7 @@ import { settleBet } from '@/lib/settleBet';
 import { Log } from '@/models/Log';
 import { Bet, type IBet } from '@/models/Bet';
 import { User } from '@/models/User';
-import { updateUserStats } from '@/lib/stats';
+import { updateUserStatsFromAggregation } from '@/lib/stats';
 
 export const runtime = 'nodejs';
 
@@ -94,15 +94,23 @@ export async function POST() {
       }
     }
 
-    const affectedUserIds = [
-      ...new Set(
-        [...pendingBets, ...pendingParlays].map((b) => b.userId.toString()),
-      ),
-    ];
-    for (const userId of affectedUserIds) {
+    // Collect unique whopUserIds from affected bets
+    const affectedWhopUserIds = new Set<string>();
+    for (const bet of [...pendingBets, ...pendingParlays]) {
       try {
-        const allBets = await Bet.find({ userId }).lean();
-        await updateUserStats(userId, allBets as unknown as IBet[]);
+        const user = await User.findById(bet.userId);
+        if (user && user.whopUserId) {
+          affectedWhopUserIds.add(user.whopUserId);
+        }
+      } catch {
+        // Skip if user lookup fails
+      }
+    }
+    
+    // Update stats for each unique whopUserId (aggregates across all companies)
+    for (const whopUserId of affectedWhopUserIds) {
+      try {
+        await updateUserStatsFromAggregation(whopUserId, '');
       } catch {
         // Error updating stats - continue silently
       }

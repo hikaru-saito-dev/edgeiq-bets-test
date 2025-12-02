@@ -5,6 +5,7 @@ export type MarketType = 'ML' | 'Spread' | 'Parlay' | 'Total' | 'Player Prop';
 
 export interface IBet extends Document {
   userId: Types.ObjectId;
+  whopUserId: string;
   
   // Legacy field (kept for backward compatibility)
   eventName?: string;
@@ -58,6 +59,7 @@ export interface IBet extends Document {
 
 const BetSchema = new Schema<IBet>({
   userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  whopUserId: { type: String, required: true, index: true },
   
   // Legacy field (for backward compatibility, auto-generated if not provided)
   eventName: { type: String, trim: true },
@@ -127,6 +129,9 @@ BetSchema.index({ userId: 1, createdAt: -1 });
 BetSchema.index({ userId: 1, result: 1 });
 BetSchema.index({ userId: 1, result: 1, createdAt: -1 }); // For stats aggregation
 BetSchema.index({ userId: 1, parlayId: 1, result: 1 }); // For personal stats aggregation
+BetSchema.index({ whopUserId: 1, createdAt: -1 });
+BetSchema.index({ whopUserId: 1, result: 1 });
+BetSchema.index({ whopUserId: 1, result: 1, createdAt: -1 }); // For cross-company stats aggregation
 BetSchema.index({ result: 1, createdAt: -1 }); // For leaderboard filtering
 BetSchema.index({ startTime: 1, locked: 1 });
 

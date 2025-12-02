@@ -4,7 +4,7 @@ import { notifyBetSettled } from '@/lib/betNotifications';
 import connectDB from '@/lib/db';
 import { settleBet, getEvent, isGameEnded, computePlayerStatValue, findPlayerKeyByName } from '@/lib/settleBet';
 import { mapStatTypeToStatId } from '@/lib/betValidation';
-import { updateUserStats } from '@/lib/stats';
+import { updateUserStatsFromAggregation } from '@/lib/stats';
 import { Log } from '@/models/Log';
 import { Bet, type IBet } from '@/models/Bet';
 import { User } from '@/models/User';
@@ -95,9 +95,8 @@ export async function GET(request: NextRequest) {
                 const parlayUser = await User.findById(parlayBet.userId);
                 await notifyBetSettled(parlayBet as unknown as IBet, parlayResult, parlayUser ?? undefined);
 
-                if (parlayUser) {
-                  const allParlayBets = await Bet.find({ userId: parlayBet.userId }).lean();
-                  await updateUserStats(parlayBet.userId.toString(), allParlayBets as unknown as IBet[]);
+                if (parlayUser && parlayUser.whopUserId) {
+                  await updateUserStatsFromAggregation(parlayUser.whopUserId, '');
                 }
               }
             }
@@ -108,9 +107,8 @@ export async function GET(request: NextRequest) {
 
         // Update user stats and send notification
         const user = await User.findById(bet.userId);
-        if (user) {
-          const allBets = await Bet.find({ userId: bet.userId }).lean();
-          await updateUserStats(bet.userId.toString(), allBets as unknown as IBet[]);
+        if (user && user.whopUserId) {
+          await updateUserStatsFromAggregation(user.whopUserId, '');
         }
 
         if (!bet.parlayId) {
@@ -243,9 +241,8 @@ export async function GET(request: NextRequest) {
               const parlayUser = await User.findById(parlayBet.userId);
               await notifyBetSettled(parlayBet as unknown as IBet, parlayResult, parlayUser ?? undefined);
 
-              if (parlayUser) {
-                const allParlayBets = await Bet.find({ userId: parlayBet.userId }).lean();
-                await updateUserStats(parlayBet.userId.toString(), allParlayBets as unknown as IBet[]);
+              if (parlayUser && parlayUser.whopUserId) {
+                await updateUserStatsFromAggregation(parlayUser.whopUserId, '');
               }
             }
           }
@@ -256,9 +253,8 @@ export async function GET(request: NextRequest) {
 
       // Update user stats and send notification
       const user = await User.findById(bet.userId);
-      if (user) {
-        const allBets = await Bet.find({ userId: bet.userId }).lean();
-        await updateUserStats(bet.userId.toString(), allBets as unknown as IBet[]);
+      if (user && user.whopUserId) {
+        await updateUserStatsFromAggregation(user.whopUserId, '');
       }
 
       if (!bet.parlayId) {

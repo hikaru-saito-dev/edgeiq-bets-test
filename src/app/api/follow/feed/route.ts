@@ -144,33 +144,18 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Step 5: Build bet query conditions for ALL cappers (single query using $or)
-    // Since bets are no longer company-scoped, we only need userId and createdAt
-    const betOrConditions: Array<{
-      userId: mongoose.Types.ObjectId;
-      createdAt: { $gte: Date };
-    }> = [];
-
-    // Collect unique userIds from all capper users (across all companies)
-    const uniqueCapperUserIds = new Set<string>();
+    // Step 5: Build bet query conditions for ALL cappers using whopUserId
+    // Collect unique whopUserIds and their earliest follow dates
+    const whopUserIdConditions = new Map<string, Date>();
 
     for (const [capperWhopUserId, metadata] of followMetadata.entries()) {
-      const capperUsers = capperUserMap.get(capperWhopUserId);
-      if (!capperUsers) continue;
-
-      for (const capperUser of capperUsers) {
-        const userIdStr = String(capperUser._id);
-        if (!uniqueCapperUserIds.has(userIdStr)) {
-          uniqueCapperUserIds.add(userIdStr);
-          betOrConditions.push({
-            userId: capperUser._id,
-            createdAt: { $gte: metadata.createdAt },
-          });
-        }
+      if (!whopUserIdConditions.has(capperWhopUserId) || 
+          metadata.createdAt < (whopUserIdConditions.get(capperWhopUserId) || new Date())) {
+        whopUserIdConditions.set(capperWhopUserId, metadata.createdAt);
       }
     }
 
-    if (betOrConditions.length === 0) {
+    if (whopUserIdConditions.size === 0) {
       return NextResponse.json({
         bets: [],
         page,
@@ -182,39 +167,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 6: Get all bets in a single optimized query using aggregation
-    // This replaces N*M queries with a single aggregated query
+    // Filter directly by whopUserId (no need for User join)
     const betPipeline: PipelineStage[] = [
       {
         $match: {
-          $or: betOrConditions.map(condition => ({
-            userId: new mongoose.Types.ObjectId(condition.userId),
-            createdAt: condition.createdAt,
-          })),
           parlayId: { $exists: false },
-        },
-      },
-      {
-        $lookup: {
-          from: User.collection.name,
-          localField: 'userId',
-          foreignField: '_id',
-          as: 'userInfo',
-        },
-      },
-      {
-        $unwind: {
-          path: '$userInfo',
-          preserveNullAndEmptyArrays: false,
+          $or: Array.from(whopUserIdConditions.entries()).map(([whopUserId, createdAt]) => ({
+            whopUserId,
+            createdAt: { $gte: createdAt },
+          })),
         },
       },
       {
         $addFields: {
-          capperWhopUserId: '$userInfo.whopUserId',
-        },
-      },
-      {
-        $match: {
-          capperWhopUserId: { $in: Array.from(capperWhopUserIds) },
+          capperWhopUserId: '$whopUserId',
         },
       },
       {
@@ -282,7 +248,7 @@ export async function GET(request: NextRequest) {
       const actionData = actionMap.get(betId);
       
       // Remove internal fields and add follow info
-      const { userInfo, capperWhopUserId: _, ...betData } = bet;
+      const { capperWhopUserId: _, ...betData } = bet;
       
       return {
         ...betData,
