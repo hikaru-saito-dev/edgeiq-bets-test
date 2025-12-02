@@ -114,9 +114,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Remove all existing query parameters and add only ?a=username
+    // Remove all existing query parameters, remove trailing slash, and add only ?a=username
     const url = new URL(purchaseUrl);
     url.search = ''; // Clear all existing query parameters (including session)
+    
+    // Remove trailing slash from pathname
+    url.pathname = url.pathname.replace(/\/$/, '');
+    
+    // Add affiliate code
     url.searchParams.set('a', capperUsername);
     const finalCheckoutUrl = url.toString();
 
