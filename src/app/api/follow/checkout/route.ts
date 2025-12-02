@@ -65,12 +65,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // CRITICAL: Always create a new checkout configuration with unique plan per capper
-    // Each capper MUST have a unique plan_id - webhook processing relies on plan_id separation
-    // Include capper's MongoDB _id + timestamp in plan name to guarantee uniqueness
     const capperIdString = String(capper._id);
-    const timestamp = Date.now();
-    const uniquePlanName = `Follow ${capperUsername || capper.alias || 'Creator'} - ${capperIdString.slice(-8)} - ${timestamp}`;
     
     const checkoutResponse = await fetch(
       'https://api.whop.com/api/v1/checkout_configurations',
@@ -86,12 +81,10 @@ export async function POST(request: NextRequest) {
             initial_price: priceCents,
             plan_type: 'one_time',
             currency: 'usd',
-            name: uniquePlanName, // Unique name with capper ID ensures unique plan_id per capper
-            description: `Follow offer for ${capperUsername || capper.alias} - ${numPlays} plays - ID: ${capperIdString}`,
           },
           metadata: {
             followPurchase: true,
-            capperUserId: capperIdString, // Unique identifier per capper
+            capperUserId: capperIdString, // Unique MongoDB _id per capper - this is the primary identifier
             capperCompanyId: capper.companyId || companyId,
             numPlays: numPlays,
           },
