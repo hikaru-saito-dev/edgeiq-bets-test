@@ -15,6 +15,7 @@ import {
   Chip,
   Avatar,
   Button,
+  Collapse,
 } from '@mui/material';
 import BetCard from '@/components/BetCard';
 import { useToast } from '@/components/ToastProvider';
@@ -83,6 +84,7 @@ export default function FollowingPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [selectedFollowId, setSelectedFollowId] = useState<string>('all');
+  const [showFollows, setShowFollows] = useState(false);
 
   const fetchFollowingFeed = async () => {
     if (!isAuthorized || accessLoading) return;
@@ -180,79 +182,76 @@ export default function FollowingPage() {
               border: `1px solid ${alpha(theme.palette.primary.main, isDark ? 0.3 : 0.2)}`,
             }}
           >
-            <Typography variant="h6" sx={{ color: 'var(--app-text)', fontWeight: 600, mb: 2 }}>
-              Active Follows
-            </Typography>
-            <Box display="flex" flexDirection="column" gap={2}>
-              {follows.map((follow) => (
-                <Box
-                  key={follow.followPurchaseId}
-                  sx={{
-                    p: 2,
-                    borderRadius: 2,
-                    backgroundColor: alpha(theme.palette.primary.main, isDark ? 0.15 : 0.08),
-                    border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-                  }}
-                >
-                  <Box display="flex" alignItems="center" gap={2} mb={1}>
-                    {follow.capper.avatarUrl && (
-                      <Avatar src={follow.capper.avatarUrl} sx={{ width: 40, height: 40 }}>
-                        {follow.capper.alias.charAt(0).toUpperCase()}
-                      </Avatar>
-                    )}
-                    <Box flex={1}>
-                      <Typography variant="body1" sx={{ color: 'var(--app-text)', fontWeight: 600 }}>
-                        {follow.capper.alias}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: 'var(--text-muted)' }}>
-                        {follow.remainingPlays} of {follow.numPlaysPurchased} plays remaining
-                      </Typography>
-                    </Box>
-                    <Chip
-                      label={follow.status === 'active' ? 'Active' : 'Completed'}
-                      size="small"
-                      color={follow.status === 'active' ? 'primary' : 'default'}
-                    />
-                    <Button
-                      variant="text"
-                      size="small"
-                      sx={{
-                        textTransform: 'none',
-                        color: theme.palette.primary.light,
-                        ml: 2,
-                      }}
-                      onClick={() => {
-                        setSelectedFollowId(follow.followPurchaseId);
-                        const betsSection = document.getElementById('following-bets-section');
-                        if (betsSection) {
-                          betsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                      }}
-                    >
-                      View Details
-                    </Button>
-                  </Box>
+            <Box display="flex" alignItems="center" justifyContent="space-between" mb={showFollows ? 2 : 0}>
+              <Typography variant="h6" sx={{ color: 'var(--app-text)', fontWeight: 600 }}>
+                Active Follows
+              </Typography>
+              <Button
+                variant="text"
+                size="small"
+                sx={{
+                  textTransform: 'none',
+                  color: theme.palette.primary.light,
+                }}
+                onClick={() => setShowFollows((prev) => !prev)}
+              >
+                {showFollows ? 'Hide Follows' : 'View Follows'}
+              </Button>
+            </Box>
+            <Collapse in={showFollows}>
+              <Box display="flex" flexDirection="column" gap={2}>
+                {follows.map((follow) => (
                   <Box
+                    key={follow.followPurchaseId}
                     sx={{
-                      height: 6,
-                      borderRadius: 3,
-                      backgroundColor: alpha(theme.palette.primary.main, 0.2),
-                      overflow: 'hidden',
-                      mt: 1,
+                      p: 2,
+                      borderRadius: 2,
+                      backgroundColor: alpha(theme.palette.primary.main, isDark ? 0.15 : 0.08),
+                      border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
                     }}
                   >
+                    <Box display="flex" alignItems="center" gap={2} mb={1}>
+                      {follow.capper.avatarUrl && (
+                        <Avatar src={follow.capper.avatarUrl} sx={{ width: 40, height: 40 }}>
+                          {follow.capper.alias.charAt(0).toUpperCase()}
+                        </Avatar>
+                      )}
+                      <Box flex={1}>
+                        <Typography variant="body1" sx={{ color: 'var(--app-text)', fontWeight: 600 }}>
+                          {follow.capper.alias}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'var(--text-muted)' }}>
+                          {follow.remainingPlays} of {follow.numPlaysPurchased} plays remaining
+                        </Typography>
+                      </Box>
+                      <Chip
+                        label={follow.status === 'active' ? 'Active' : 'Completed'}
+                        size="small"
+                        color={follow.status === 'active' ? 'primary' : 'default'}
+                      />
+                    </Box>
                     <Box
                       sx={{
-                        height: '100%',
-                        width: `${(follow.remainingPlays / follow.numPlaysPurchased) * 100}%`,
-                        background: 'linear-gradient(90deg, #3b82f6, #2563eb)',
-                        transition: 'width 0.3s ease',
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: alpha(theme.palette.primary.main, 0.2),
+                        overflow: 'hidden',
+                        mt: 1,
                       }}
-                    />
+                    >
+                      <Box
+                        sx={{
+                          height: '100%',
+                          width: `${(follow.remainingPlays / follow.numPlaysPurchased) * 100}%`,
+                          background: 'linear-gradient(90deg, #3b82f6, #2563eb)',
+                          transition: 'width 0.3s ease',
+                        }}
+                      />
+                    </Box>
                   </Box>
-                </Box>
-              ))}
-            </Box>
+                ))}
+              </Box>
+            </Collapse>
           </Paper>
         )}
 
