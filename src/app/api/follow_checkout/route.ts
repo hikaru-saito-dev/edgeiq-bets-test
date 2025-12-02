@@ -16,7 +16,7 @@ if (!WEBHOOK_SECRET) {
 const whopSdk = new Whop({
   appID: process.env.NEXT_PUBLIC_WHOP_APP_ID,
   apiKey: process.env.WHOP_API_KEY || '',
-  webhookKey: WEBHOOK_SECRET, // Already in correct whsec_... format from Whop
+  webhookKey: btoa(WEBHOOK_SECRET), // Base64 encode the raw webhook secret
 });
 
 export const dynamic = 'force-dynamic';
@@ -42,9 +42,11 @@ export async function POST(request: NextRequest) {
       webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
     } catch (error) {
       if (error instanceof WebhookVerificationError) {
+        console.error('Webhook verification failed - likely invalid webhook secret or signature mismatch');
         return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
       }
-      console.error('Webhook unwrap error:', error instanceof Error ? error.message : error);
+      console.error('Webhook unwrap error:', error instanceof Error ? error.message : String(error));
+      console.error('This usually means WHOP_WEBHOOK_SECRET is invalid or not a valid Base64 string');
       return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 
@@ -144,6 +146,6 @@ async function handlePaymentSucceeded(payment: Payment) {
 
     await followPurchase.save();
   } catch (error) {
-    console.error('Payment webhook processing error:', error instanceof Error ? error.message : error);
+    console.error('Payment webhook processing error:', error instanceof Error ? error.message : String(error));
   }
 }
