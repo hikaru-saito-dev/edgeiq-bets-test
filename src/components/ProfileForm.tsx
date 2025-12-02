@@ -200,7 +200,7 @@ export default function ProfileForm() {
       setFollowOfferEnabled(profileData.user.followOfferEnabled ?? false);
       const priceValue = profileData.user.followOfferPriceCents ?? 0;
       setFollowOfferPriceDollars(priceValue);
-      setPriceInputValue(priceValue > 0 ? priceValue.toString() : '');
+      setPriceInputValue(priceValue > 0 ? Number(priceValue).toFixed(2) : '');
       setFollowOfferNumPlays(profileData.user.followOfferNumPlays ?? 10);
       setPersonalStats(profileData.personalStats);
       setCompanyStats(profileData.companyStats || null);
@@ -1112,19 +1112,35 @@ export default function ProfileForm() {
               value={priceInputValue}
               onChange={(e) => {
                 const value = e.target.value;
-                setPriceInputValue(value);
-                // Parse and update the numeric value for validation
+                
+                // Allow empty string
                 if (value === '') {
+                  setPriceInputValue('');
                   setFollowOfferPriceDollars(0);
-                } else {
-                  const numValue = parseFloat(value);
-                  if (!isNaN(numValue) && numValue >= 0) {
-                    setFollowOfferPriceDollars(numValue);
+                  return;
+                }
+                
+                // Check if value has more than 2 decimal places
+                const decimalIndex = value.indexOf('.');
+                if (decimalIndex !== -1) {
+                  const decimalPart = value.substring(decimalIndex + 1);
+                  if (decimalPart.length > 2) {
+                    // Don't update if more than 2 decimal places
+                    return;
                   }
+                }
+                
+                // Allow the input and update state
+                setPriceInputValue(value);
+                
+                // Parse and update the numeric value for validation
+                const numValue = parseFloat(value);
+                if (!isNaN(numValue) && numValue >= 0) {
+                  setFollowOfferPriceDollars(numValue);
                 }
               }}
               onBlur={(e) => {
-                // Format on blur - ensure valid number
+                // Format on blur - ensure valid number with max 2 decimal places
                 const value = e.target.value;
                 if (value === '' || value === '.') {
                   setPriceInputValue('');
@@ -1132,11 +1148,13 @@ export default function ProfileForm() {
                 } else {
                   const numValue = parseFloat(value);
                   if (!isNaN(numValue) && numValue >= 0) {
-                    setPriceInputValue(numValue.toString());
+                    // Format to 2 decimal places
+                    const formattedValue = numValue.toFixed(2);
+                    setPriceInputValue(formattedValue);
                     setFollowOfferPriceDollars(numValue);
                   } else {
                     // Reset to previous valid value
-                    setPriceInputValue(followOfferPriceDollars > 0 ? followOfferPriceDollars.toString() : '');
+                    setPriceInputValue(followOfferPriceDollars > 0 ? followOfferPriceDollars.toFixed(2) : '');
                   }
                 }
               }}
