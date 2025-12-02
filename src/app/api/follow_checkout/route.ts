@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
       if (error instanceof WebhookVerificationError) {
         return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
       }
+      console.error('Webhook unwrap error:', error instanceof Error ? error.message : error);
       return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 
@@ -53,7 +54,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true }, { status: 200 });
-  } catch {
+  } catch (error) {
+    console.error('POST handler error:', error instanceof Error ? error.message : error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
@@ -141,7 +143,7 @@ async function handlePaymentSucceeded(payment: Payment) {
     });
 
     await followPurchase.save();
-  } catch {
-    // Silently fail - webhook already acknowledged with 200
+  } catch (error) {
+    console.error('Payment webhook processing error:', error instanceof Error ? error.message : error);
   }
 }
