@@ -1,7 +1,6 @@
 import { Bet } from '@/models/Bet';
 import type { IBet } from '@/models/Bet';
 import type { IUser } from '@/models/User';
-import { User } from '@/models/User';
 import connectDB from '@/lib/db';
 
 /**

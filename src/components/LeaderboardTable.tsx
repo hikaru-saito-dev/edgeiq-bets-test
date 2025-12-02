@@ -112,8 +112,6 @@ export default function LeaderboardTable() {
   const controlBg = alpha(theme.palette.background.paper, isDark ? 0.55 : 0.95);
   const controlBorder = alpha(theme.palette.primary.main, isDark ? 0.45 : 0.25);
   const controlHoverBg = alpha(theme.palette.primary.main, 0.2);
-  const streakBg = alpha(theme.palette.primary.main, isDark ? 0.25 : 0.12);
-  const streakBorder = `1px solid ${alpha(theme.palette.primary.main, isDark ? 0.55 : 0.3)}`;
   const paginationDisabledColor = alpha(theme.palette.text.primary, 0.4);
   const membershipCardBg = alpha(theme.palette.background.paper, isDark ? 0.8 : 0.96);
   const membershipBorder = `1px solid ${alpha(theme.palette.primary.main, isDark ? 0.45 : 0.2)}`;
@@ -554,7 +552,6 @@ export default function LeaderboardTable() {
                   leaderboard.map((entry) => {
                     const wins = entry.wins || 0;
                     const losses = entry.losses || 0;
-                    const totalPlays = wins + losses || entry.plays;
                     const wlDisplay = wins > 0 || losses > 0 ? `${wins}-${losses}` : entry.plays.toString();
 
                     return (

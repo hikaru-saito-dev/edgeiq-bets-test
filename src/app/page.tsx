@@ -6,13 +6,11 @@ import { motion } from 'framer-motion';
 import { useAccess, setExperienceId } from '@/components/AccessProvider';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect } from 'react';
-import { useTheme } from '@mui/material/styles';
 
 function HomeContent() {
   const searchParams = useSearchParams();
   const experienceId = searchParams?.get('experience') || null;
   const { isAuthorized, loading, role, hideLeaderboardFromMembers  } = useAccess();
-  const theme = useTheme();
 
   // Set experienceId in AccessProvider when it's available from page.tsx
   useEffect(() => {

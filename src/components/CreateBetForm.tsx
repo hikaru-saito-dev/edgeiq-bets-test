@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, ChangeEvent } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -289,28 +289,6 @@ export default function CreateBetForm({ open, onClose, onSuccess }: CreateBetFor
   const isDark = theme.palette.mode === 'dark';
   const controlBg = alpha(theme.palette.background.paper, isDark ? 0.75 : 0.98);
   const controlBorder = alpha(theme.palette.primary.main, isDark ? 0.45 : 0.25);
-  const fieldStyles = {
-    '& .MuiOutlinedInput-root': {
-      color: 'var(--app-text)',
-      backgroundColor: controlBg,
-      '& fieldset': {
-        borderColor: controlBorder,
-      },
-      '&:hover fieldset': {
-        borderColor: theme.palette.primary.main,
-      },
-      '&.Mui-focused fieldset': {
-        borderColor: theme.palette.primary.main,
-        boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.15)}`,
-      },
-    },
-    '& .MuiInputLabel-root': {
-      color: 'var(--text-muted)',
-      '&.Mui-focused': {
-        color: theme.palette.primary.main,
-      },
-    },
-  };
   
   const [book, setBook] = useState('');
   const [notes, setNotes] = useState('');
@@ -347,17 +325,6 @@ export default function CreateBetForm({ open, onClose, onSuccess }: CreateBetFor
     );
       
   }, [userWebhooks]);
-
-  const handleMultiWebhookToggle = (_event: ChangeEvent<HTMLInputElement>, checked: boolean) => {
-    if (checked) {
-      setSelectedWebhookIds((prev) => {
-        if (prev.length > 0) return prev;
-        return [];
-      });
-    } else {
-      setSelectedWebhookIds([]);
-    }
-  };
 
   const handleWebhookSelection = (webhookId: string, checked: boolean) => {
     setSelectedWebhookIds((prev) => {

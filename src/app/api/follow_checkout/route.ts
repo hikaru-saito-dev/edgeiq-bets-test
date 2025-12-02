@@ -26,6 +26,7 @@ interface WhopWebhookPayload {
       capperUserId?: string;
       capperCompanyId?: string;
       numPlays?: number | string;
+      project?: string;
     };
   };
   api_version: string;
@@ -68,6 +69,7 @@ function verifyWhopSignature(
       Buffer.from(computedSignature, 'hex')
     );
   } catch (error) {
+    console.error('[FollowPurchase] Error verifying webhook signature:', error);
     return false;
   }
 }
@@ -146,6 +148,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     // Return JSON response for compatibility
     return Response.json({ success: true }, { status: 200 });
   } catch (error) {
+    console.error('[FollowPurchase] Error handling webhook:', error);
     return new Response('Internal server error', { status: 500 });
   }
 }
@@ -205,9 +208,12 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
       console.error('[FollowPurchase] Not a follow purchase webhook. Metadata:', JSON.stringify(metadata));
       return;
     }
-
+    const project = metadata.project;
     const capperUserId = metadata.capperUserId;
     const capperCompanyId = metadata.capperCompanyId || paymentData.company_id;
+    if (project !== "Bet") {
+      return;
+    }
     // Handle numPlays as either number or string
     const numPlaysRaw =
       typeof metadata.numPlays === 'string'

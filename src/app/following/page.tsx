@@ -14,6 +14,7 @@ import {
   MenuItem,
   Chip,
   Avatar,
+  Button,
 } from '@mui/material';
 import BetCard from '@/components/BetCard';
 import { useToast } from '@/components/ToastProvider';
@@ -81,6 +82,7 @@ export default function FollowingPage() {
   const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [selectedFollowId, setSelectedFollowId] = useState<string>('all');
 
   const fetchFollowingFeed = async () => {
     if (!isAuthorized || accessLoading) return;
@@ -135,6 +137,13 @@ export default function FollowingPage() {
 
   const controlBg = alpha(theme.palette.background.paper, isDark ? 0.6 : 0.98);
   const controlBorder = alpha(theme.palette.primary.main, isDark ? 0.45 : 0.25);
+
+  const filteredBets =
+    selectedFollowId === 'all'
+      ? bets
+      : bets.filter(
+          (bet) => bet.followInfo?.followPurchaseId === selectedFollowId
+        );
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -204,6 +213,24 @@ export default function FollowingPage() {
                       size="small"
                       color={follow.status === 'active' ? 'primary' : 'default'}
                     />
+                    <Button
+                      variant="text"
+                      size="small"
+                      sx={{
+                        textTransform: 'none',
+                        color: theme.palette.primary.light,
+                        ml: 2,
+                      }}
+                      onClick={() => {
+                        setSelectedFollowId(follow.followPurchaseId);
+                        const betsSection = document.getElementById('following-bets-section');
+                        if (betsSection) {
+                          betsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }}
+                    >
+                      View Details
+                    </Button>
                   </Box>
                   <Box
                     sx={{
@@ -261,6 +288,42 @@ export default function FollowingPage() {
               {total > 0 ? `of ${total} bets` : 'No bets'}
             </Typography>
           </Box>
+          {follows.length > 0 && (
+            <Box display="flex" alignItems="center" gap={1}>
+              <Typography variant="body2" sx={{ color: 'var(--text-muted)' }}>
+                Creator
+              </Typography>
+              <FormControl size="small">
+                <Select
+                  value={selectedFollowId}
+                  onChange={(e) => {
+                    setSelectedFollowId(e.target.value as string);
+                    setPage(1);
+                  }}
+                  sx={{
+                    minWidth: 140,
+                    color: 'var(--app-text)',
+                    backgroundColor: controlBg,
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: controlBorder },
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.primary.main },
+                  }}
+                >
+                  <MenuItem value="all" sx={{ color: 'var(--app-text)' }}>
+                    All creators
+                  </MenuItem>
+                  {follows.map((follow) => (
+                    <MenuItem
+                      key={follow.followPurchaseId}
+                      value={follow.followPurchaseId}
+                      sx={{ color: 'var(--app-text)' }}
+                    >
+                      {follow.capper.alias}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+          )}
         </Box>
 
         {/* Bets Feed */}
@@ -290,7 +353,7 @@ export default function FollowingPage() {
           </Paper>
         ) : (
           <Box display="flex" flexDirection="column" gap={3}>
-            {bets.map((bet) => (
+            {filteredBets.map((bet) => (
               <motion.div
                 key={bet._id}
                 initial={{ opacity: 0, y: 20 }}

@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
           },
           metadata: {
             followPurchase: true,
+            project: "Bet",
             capperUserId: capperIdString, // Unique MongoDB _id per capper - this is the primary identifier
             capperCompanyId: capper.companyId || companyId,
             numPlays: numPlays,

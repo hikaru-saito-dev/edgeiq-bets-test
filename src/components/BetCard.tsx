@@ -89,9 +89,6 @@ export default function BetCard({ bet, onUpdate, disableDelete = false }: BetCar
   const fillsBorder = `1px solid ${alpha(theme.palette.primary.main, isDark ? 0.45 : 0.25)}`;
   const fillsBg = alpha(theme.palette.background.paper, isDark ? 0.3 : 0.85);
   const timestampColor = alpha(theme.palette.text.secondary, 0.9);
-  const actionGradient = `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`;
-  const actionGradientHover = `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`;
-  const actionGradientDisabled = alpha(theme.palette.primary.main, 0.35);
   const getResultColor = () => {
     switch (bet.result) {
       case 'win': return 'success';

@@ -12,9 +12,7 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
-  useMediaQuery,
   useTheme,
-  Divider,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
@@ -27,7 +25,6 @@ export default function Navigation() {
   const { isAuthorized, role, loading, hideLeaderboardFromMembers } = useAccess();
   const [mobileOpen, setMobileOpen] = useState(false);
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isDark = theme.palette.mode === 'dark';
 
   const navGradient = isDark
