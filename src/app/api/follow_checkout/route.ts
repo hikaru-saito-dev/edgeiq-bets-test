@@ -110,7 +110,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     } catch (error) {
       return new Response('Invalid JSON payload', { status: 400 });
     }
-
+ 
     // Handle app_payment.succeeded events
     if (webhookPayload.action === 'app_payment.succeeded') {
       waitUntil(handlePaymentSucceeded(webhookPayload.data));
