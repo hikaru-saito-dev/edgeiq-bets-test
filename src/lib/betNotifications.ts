@@ -450,11 +450,12 @@ async function getParlayLegDetails(bet: IBet): Promise<string[]> {
       return `Leg ${index + 1}: ${event}${start}\n    ${market}`;
     });
   } catch (error) {
+    console.error('Error fetching parlay leg details:', error);
     return [];
   }
 }
 
-export async function notifyBetCreated(bet: IBet, user?: IUser | null, _companyId?: string): Promise<void> {
+export async function notifyBetCreated(bet: IBet, user?: IUser | null, _companyId?: string | undefined): Promise<void> {
   // Send notification only to the specific user who created the bet
   if (!user || (user.role !== 'companyOwner' && user.role !== 'owner' && user.role !== 'admin')) {
     return;

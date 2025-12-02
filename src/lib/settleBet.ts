@@ -219,7 +219,7 @@ export async function getEvent(
       return event;
     }
   } catch (error) {
-    console.warn(`Event ID lookup failed for ${eventId}, trying fallback search...`);
+    console.warn(`Event ID lookup failed for ${eventId}, trying fallback search...`, error);
   }
 
   // Method 2: Try with eventIDs (plural) as fallback
@@ -238,7 +238,7 @@ export async function getEvent(
       return event;
     }
   } catch (error) {
-    console.warn(`Event IDs lookup failed for ${eventId}, trying team search...`);
+    console.warn(`Event IDs lookup failed for ${eventId}, trying team search...`, error);
   }
 
   // Method 3: Fallback to team name and date range search

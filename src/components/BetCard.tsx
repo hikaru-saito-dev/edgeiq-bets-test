@@ -70,14 +70,20 @@ interface BetCardProps {
       units: number;
       result: 'pending' | 'win' | 'loss' | 'push' | 'void';
     }>;
+    actionStatus?: {
+      action: 'follow' | 'fade';
+      followedBetId?: string;
+    } | null;
   };
   onUpdate?: () => void;
   disableDelete?: boolean; // When true, hides the delete button (e.g., for followed bets)
+  onAction?: (betId: string, action: 'follow' | 'fade') => Promise<void>; // Callback when Follow/Fade is clicked
 }
 
-export default function BetCard({ bet, onUpdate, disableDelete = false }: BetCardProps) {
+export default function BetCard({ bet, onUpdate, disableDelete = false, onAction }: BetCardProps) {
   const toast = useToast();
   const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
   const [showParlayLegs, setShowParlayLegs] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const { userId, companyId } = useAccess();
@@ -631,7 +637,66 @@ export default function BetCard({ bet, onUpdate, disableDelete = false }: BetCar
             </Collapse>
           </Box>
 
-          <Box display="flex" gap={1} justifyContent="flex-end">
+          <Box display="flex" gap={1} justifyContent="flex-end" alignItems="center">
+            {/* Follow/Fade buttons - shown when bet is from following feed and no action taken yet */}
+            {bet.actionStatus !== undefined && bet.result === 'pending' && (
+              <>
+                {bet.actionStatus === null ? (
+                  // No action taken yet - show Follow and Fade buttons
+                  <>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      size="small"
+                      disabled={actionLoading || bet.locked}
+                      onClick={async () => {
+                        if (!onAction) return;
+                        setActionLoading(true);
+                        try {
+                          await onAction(bet._id, 'follow');
+                        } catch (err) {
+                          console.error('Error following bet:', err);
+                        } finally {
+                          setActionLoading(false);
+                        }
+                      }}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Follow
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      size="small"
+                      disabled={actionLoading || bet.locked}
+                      onClick={async () => {
+                        if (!onAction) return;
+                        setActionLoading(true);
+                        try {
+                          await onAction(bet._id, 'fade');
+                        } catch (err) {
+                          console.error('Error fading bet:', err);
+                        } finally {
+                          setActionLoading(false);
+                        }
+                      }}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Fade
+                    </Button>
+                  </>
+                ) : (
+                  // Action already taken - show status chip
+                  <Chip
+                    label={bet.actionStatus.action === 'follow' ? 'Followed' : 'Faded'}
+                    color={bet.actionStatus.action === 'follow' ? 'success' : 'default'}
+                    size="small"
+                    sx={{ textTransform: 'none' }}
+                  />
+                )}
+              </>
+            )}
+            
             {!disableDelete && bet.result === 'pending' && (() => {
               const now = new Date();
               const startTime = new Date(bet.startTime);

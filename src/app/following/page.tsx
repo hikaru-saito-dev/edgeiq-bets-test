@@ -55,6 +55,10 @@ interface Bet {
     followPurchaseId: string;
     remainingPlays: number;
   };
+  actionStatus?: {
+    action: 'follow' | 'fade';
+    followedBetId?: string;
+  } | null;
 }
 
 interface Follow {
@@ -359,7 +363,39 @@ export default function FollowingPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
               >
-                <BetCard bet={bet} onUpdate={fetchFollowingFeed} disableDelete={true} />
+                <BetCard 
+                  bet={bet} 
+                  onUpdate={fetchFollowingFeed} 
+                  disableDelete={true}
+                  onAction={async (betId: string, action: 'follow' | 'fade') => {
+                    try {
+                      const res = await apiRequest('/api/follow/bet-action', {
+                        method: 'POST',
+                        body: JSON.stringify({ betId, action }),
+                        userId,
+                        companyId,
+                      });
+                      
+                      if (!res.ok) {
+                        const error = await res.json();
+                        throw new Error(error.error || `Failed to ${action} bet`);
+                      }
+                      
+                      const data = await res.json();
+                      toast.showSuccess(data.message || `Bet ${action === 'follow' ? 'followed' : 'faded'} successfully`);
+                      
+                      // Refresh the feed to update action status
+                      await fetchFollowingFeed();
+                    } catch (error) {
+                      if (error instanceof Error) {
+                        toast.showError(error.message);
+                      } else {
+                        toast.showError(`Failed to ${action} bet`);
+                      }
+                      throw error;
+                    }
+                  }}
+                />
               </motion.div>
             ))}
           </Box>

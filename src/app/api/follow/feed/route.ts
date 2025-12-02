@@ -3,6 +3,7 @@ import connectDB from '@/lib/db';
 import { User } from '@/models/User';
 import { Bet } from '@/models/Bet';
 import { FollowPurchase } from '@/models/FollowPurchase';
+import { FollowedBetAction } from '@/models/FollowedBetAction';
 import mongoose, { PipelineStage } from 'mongoose';
 
 export const runtime = 'nodejs';
@@ -245,10 +246,35 @@ export async function GET(request: NextRequest) {
     const total = allBets.length;
     const paginatedBets = allBets.slice((page - 1) * pageSize, page * pageSize);
 
-    // Step 10: Format bets with follow info
+    // Step 9.5: Get action status for all bets (batch query)
+    const betIds = paginatedBets.map(bet => {
+      const id = bet._id;
+      return id instanceof mongoose.Types.ObjectId ? id : new mongoose.Types.ObjectId(String(id));
+    });
+    const actions = await FollowedBetAction.find({
+      followerWhopUserId: user.whopUserId,
+      originalBetId: { $in: betIds },
+    }).lean();
+    
+    const actionMap = new Map<string, { action: 'follow' | 'fade'; followedBetId?: string }>();
+    for (const action of actions) {
+      const originalBetIdStr = action.originalBetId instanceof mongoose.Types.ObjectId 
+        ? action.originalBetId.toString() 
+        : String(action.originalBetId);
+      actionMap.set(originalBetIdStr, {
+        action: action.action,
+        followedBetId: action.followedBetId ? String(action.followedBetId) : undefined,
+      });
+    }
+
+    // Step 10: Format bets with follow info and action status
     const bets = paginatedBets.map((bet) => {
       const capperWhopUserId = bet.capperWhopUserId;
       const metadata = followMetadata.get(capperWhopUserId);
+      const betId = bet._id instanceof mongoose.Types.ObjectId 
+        ? bet._id.toString() 
+        : String(bet._id);
+      const actionData = actionMap.get(betId);
       
       // Remove internal fields and add follow info
       const { userInfo, capperWhopUserId: _, ...betData } = bet;
@@ -259,6 +285,10 @@ export async function GET(request: NextRequest) {
           followPurchaseId: metadata?.followPurchaseId || '',
           remainingPlays: metadata?.remainingPlays || 0,
         },
+        actionStatus: actionData ? {
+          action: actionData.action,
+          followedBetId: actionData.followedBetId,
+        } : null,
       };
     });
 
