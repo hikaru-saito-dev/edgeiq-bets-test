@@ -114,9 +114,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const checkoutUrl = new URL(purchaseUrl);
-    checkoutUrl.searchParams.set('a', capperUsername);
-    const finalCheckoutUrl = checkoutUrl.toString();
+    // Remove all existing query parameters and add only ?a=username
+    const url = new URL(purchaseUrl);
+    url.search = ''; // Clear all existing query parameters (including session)
+    url.searchParams.set('a', capperUsername);
+    const finalCheckoutUrl = url.toString();
 
     // Always update with new plan_id - each capper gets unique plan_id
     capper.followOfferEnabled = true;
