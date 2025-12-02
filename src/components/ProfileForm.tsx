@@ -1106,10 +1106,17 @@ export default function ProfileForm() {
               fullWidth
               label="Price (in dollars)"
               type="number"
-              value={followOfferPriceDollars > 0 ? followOfferPriceDollars.toFixed(2) : ''}
+              value={followOfferPriceDollars || ''}
               onChange={(e) => {
-                const dollars = parseFloat(e.target.value) || 0;
-                setFollowOfferPriceDollars(dollars);
+                const value = e.target.value;
+                if (value === '' || value === '.') {
+                  setFollowOfferPriceDollars(0);
+                  return;
+                }
+                const dollars = parseFloat(value);
+                if (!isNaN(dollars) && dollars >= 0) {
+                  setFollowOfferPriceDollars(dollars);
+                }
               }}
               placeholder="10.00"
               margin="normal"
