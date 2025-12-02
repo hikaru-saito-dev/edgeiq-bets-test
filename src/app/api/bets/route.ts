@@ -745,23 +745,26 @@ export async function POST(request: NextRequest) {
     try {
       const { FollowPurchase } = await import('@/models/FollowPurchase');
       
-      // Find all active follow purchases for this capper
-      const activeFollows = await FollowPurchase.find({
-        capperUserId: user._id,
-        status: 'active',
-      });
+      // Find all active follow purchases for this capper (by whopUserId - person level)
+      // This tracks plays across all companies where this person is followed
+      if (user.whopUserId) {
+        const activeFollows = await FollowPurchase.find({
+          capperWhopUserId: user.whopUserId,
+          status: 'active',
+        });
 
-      // For each active follow, increment consumed plays if there are remaining plays
-      for (const follow of activeFollows) {
-        if (follow.numPlaysConsumed < follow.numPlaysPurchased) {
-          follow.numPlaysConsumed += 1;
-          
-          // If all plays consumed, mark as completed
-          if (follow.numPlaysConsumed >= follow.numPlaysPurchased) {
-            follow.status = 'completed';
+        // For each active follow, increment consumed plays if there are remaining plays
+        for (const follow of activeFollows) {
+          if (follow.numPlaysConsumed < follow.numPlaysPurchased) {
+            follow.numPlaysConsumed += 1;
+            
+            // If all plays consumed, mark as completed
+            if (follow.numPlaysConsumed >= follow.numPlaysPurchased) {
+              follow.status = 'completed';
+            }
+            
+            await follow.save();
           }
-          
-          await follow.save();
         }
       }
     } catch (followError) {

@@ -3,13 +3,15 @@ import connectDB from '@/lib/db';
 import { User } from '@/models/User';
 import { Bet } from '@/models/Bet';
 import { FollowPurchase } from '@/models/FollowPurchase';
+import mongoose, { PipelineStage } from 'mongoose';
 
 export const runtime = 'nodejs';
 
 /**
  * GET /api/follow/feed
  * Returns bets from creators the user is following
- * Filters bets based on active FollowPurchase records and remaining plays
+ * Shows bets from ALL companies where followed creators exist (person-level tracking)
+ * Optimized using MongoDB aggregation for heavy follow counts
  */
 export async function GET(request: NextRequest) {
   try {
@@ -23,9 +25,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Find current user
-    const user = await User.findOne({ whopUserId: userId, companyId: companyId });
+    // Find current user - try with companyId first, fallback to whopUserId only
+    let user = companyId 
+      ? await User.findOne({ whopUserId: userId, companyId: companyId })
+      : null;
+    
     if (!user) {
+      // Fallback: find any user record with this whopUserId
+      user = await User.findOne({ whopUserId: userId });
+    }
+    
+    if (!user || !user.whopUserId) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
@@ -34,11 +44,11 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '10', 10)));
 
-    // Find all active follow purchases for this user
+    // Step 1: Get all active follow purchases for this user (single query)
     const activeFollows = await FollowPurchase.find({
-      followerUserId: user._id,
+      followerWhopUserId: user.whopUserId,
       status: 'active',
-    }).populate('capperUserId', 'alias whopUsername whopDisplayName whopAvatarUrl');
+    }).lean();
 
     if (activeFollows.length === 0) {
       return NextResponse.json({
@@ -51,89 +61,216 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Collect all bets from followed creators
-    // For each follow, get bets created after the follow purchase date
-    // Limited to remaining plays for that follow
-    const allBets: Array<{
-      bet: unknown;
+    // Step 2: Collect all unique capper whopUserIds and build follow metadata map
+    const capperWhopUserIds = new Set<string>();
+    const followMetadata = new Map<string, {
       followPurchaseId: string;
-      capperId: string;
+      remainingPlays: number;
       createdAt: Date;
-    }> = [];
+      capperWhopUserId: string;
+    }>();
 
     for (const follow of activeFollows) {
-      const capperId = typeof follow.capperUserId === 'object' && follow.capperUserId && '_id' in follow.capperUserId
-        ? follow.capperUserId._id
-        : follow.capperUserId;
+      if (!follow.capperWhopUserId) continue;
       
       const remainingPlays = follow.numPlaysPurchased - follow.numPlaysConsumed;
-      
-      if (remainingPlays <= 0) {
-        continue; // No remaining plays for this follow
-      }
+      if (remainingPlays <= 0) continue;
 
-      // Get bets from this capper created after the follow purchase
-      // Ordered by creation date, limited to remaining plays
-      const bets = await Bet.find({
-        userId: capperId,
-        companyId: companyId,
-        parlayId: { $exists: false }, // Exclude parlay legs
-        createdAt: { $gte: follow.createdAt }, // Created after follow purchase
-      })
-        .sort({ createdAt: 1 }) // Oldest first (to get the "next X plays" in order)
-        .limit(remainingPlays)
-        .lean();
-
-      // Add bets to collection with follow info
-      bets.forEach((bet) => {
-        allBets.push({
-          bet,
-          followPurchaseId: String(follow._id),
-          capperId: String(capperId),
-          createdAt: bet.createdAt as Date,
-        });
+      capperWhopUserIds.add(follow.capperWhopUserId);
+      followMetadata.set(follow.capperWhopUserId, {
+        followPurchaseId: String(follow._id),
+        remainingPlays,
+        createdAt: follow.createdAt,
+        capperWhopUserId: follow.capperWhopUserId,
       });
     }
 
-    // Sort all bets by creation date (newest first for feed)
+    if (capperWhopUserIds.size === 0) {
+      return NextResponse.json({
+        bets: [],
+        page,
+        pageSize,
+        total: 0,
+        totalPages: 0,
+        follows: [],
+      });
+    }
+
+    // Step 3: Get ALL user records for all cappers across ALL companies (single batch query)
+    const allCapperUsers = await User.find({
+      whopUserId: { $in: Array.from(capperWhopUserIds) },
+    }).select('_id companyId whopUserId alias whopUsername whopDisplayName whopAvatarUrl').lean();
+
+    // Step 4: Group capper users by whopUserId and build user ID to company mappings
+    const capperUserMap = new Map<string, Array<{
+      _id: mongoose.Types.ObjectId;
+      companyId: string;
+      whopUserId: string;
+    }>>();
+
+    const capperInfoMap = new Map<string, {
+      alias?: string;
+      whopUsername?: string;
+      whopDisplayName?: string;
+      whopAvatarUrl?: string;
+    }>();
+
+    for (const capperUser of allCapperUsers) {
+      const whopUserId = capperUser.whopUserId;
+      if (!whopUserId || !capperUser.companyId) continue;
+
+      const userId = typeof capperUser._id === 'string' 
+        ? new mongoose.Types.ObjectId(capperUser._id)
+        : capperUser._id as mongoose.Types.ObjectId;
+
+      if (!capperUserMap.has(whopUserId)) {
+        capperUserMap.set(whopUserId, []);
+      }
+      capperUserMap.get(whopUserId)!.push({
+        _id: userId,
+        companyId: capperUser.companyId,
+        whopUserId: whopUserId,
+      });
+
+      // Store capper info (use first user record's info)
+      if (!capperInfoMap.has(whopUserId)) {
+        capperInfoMap.set(whopUserId, {
+          alias: capperUser.alias,
+          whopUsername: capperUser.whopUsername,
+          whopDisplayName: capperUser.whopDisplayName,
+          whopAvatarUrl: capperUser.whopAvatarUrl,
+        });
+      }
+    }
+
+    // Step 5: Build bet query conditions for ALL cappers across ALL companies (single query using $or)
+    const betOrConditions: Array<{
+      userId: mongoose.Types.ObjectId;
+      companyId: string;
+      createdAt: { $gte: Date };
+    }> = [];
+
+    for (const [capperWhopUserId, metadata] of followMetadata.entries()) {
+      const capperUsers = capperUserMap.get(capperWhopUserId);
+      if (!capperUsers) continue;
+
+      for (const capperUser of capperUsers) {
+        betOrConditions.push({
+          userId: capperUser._id,
+          companyId: capperUser.companyId,
+          createdAt: { $gte: metadata.createdAt },
+        });
+      }
+    }
+
+    if (betOrConditions.length === 0) {
+      return NextResponse.json({
+        bets: [],
+        page,
+        pageSize,
+        total: 0,
+        totalPages: 0,
+        follows: [],
+      });
+    }
+
+    // Step 6: Get all bets in a single optimized query using aggregation
+    // This replaces N*M queries with a single aggregated query
+    const betPipeline: PipelineStage[] = [
+      {
+        $match: {
+          $or: betOrConditions.map(condition => ({
+            userId: new mongoose.Types.ObjectId(condition.userId),
+            companyId: condition.companyId,
+            createdAt: condition.createdAt,
+          })),
+          parlayId: { $exists: false },
+        },
+      },
+      {
+        $lookup: {
+          from: User.collection.name,
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'userInfo',
+        },
+      },
+      {
+        $unwind: {
+          path: '$userInfo',
+          preserveNullAndEmptyArrays: false,
+        },
+      },
+      {
+        $addFields: {
+          capperWhopUserId: '$userInfo.whopUserId',
+        },
+      },
+      {
+        $match: {
+          capperWhopUserId: { $in: Array.from(capperWhopUserIds) },
+        },
+      },
+      {
+        $sort: { createdAt: 1 },
+      },
+    ];
+
+    const allBetsRaw = await Bet.aggregate(betPipeline).allowDiskUse(true);
+
+    // Step 7: Group bets by follow and limit to remaining plays per follow
+    const betsByFollow = new Map<string, Array<typeof allBetsRaw[0]>>();
+
+    for (const bet of allBetsRaw) {
+      const capperWhopUserId = bet.capperWhopUserId;
+      const metadata = followMetadata.get(capperWhopUserId);
+      if (!metadata) continue;
+
+      const followId = metadata.followPurchaseId;
+      if (!betsByFollow.has(followId)) {
+        betsByFollow.set(followId, []);
+      }
+
+      const followBets = betsByFollow.get(followId)!;
+      if (followBets.length < metadata.remainingPlays) {
+        followBets.push(bet);
+      }
+    }
+
+    // Step 8: Flatten all bets and sort by creation date (newest first for feed)
+    const allBets = Array.from(betsByFollow.values()).flat();
     allBets.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-    // Paginate
+    // Step 9: Paginate
     const total = allBets.length;
     const paginatedBets = allBets.slice((page - 1) * pageSize, page * pageSize);
 
-    // Format bets with follow info
-    const bets = paginatedBets.map((item) => {
-      // Get the follow purchase for this bet
-      const follow = activeFollows.find(
-        (f) => String(f._id) === item.followPurchaseId
-      );
+    // Step 10: Format bets with follow info
+    const bets = paginatedBets.map((bet) => {
+      const capperWhopUserId = bet.capperWhopUserId;
+      const metadata = followMetadata.get(capperWhopUserId);
+      
+      // Remove internal fields and add follow info
+      const { userInfo, capperWhopUserId: _, ...betData } = bet;
       
       return {
-        ...(item.bet as Record<string, unknown>),
+        ...betData,
         followInfo: {
-          followPurchaseId: item.followPurchaseId,
-          remainingPlays: follow
-            ? follow.numPlaysPurchased - follow.numPlaysConsumed
-            : 0,
+          followPurchaseId: metadata?.followPurchaseId || '',
+          remainingPlays: metadata?.remainingPlays || 0,
         },
       };
     });
 
-    // Get follow info for each active follow
+    // Step 11: Format follow info
     const follows = activeFollows.map((follow) => {
-      const capper = follow.capperUserId as unknown as {
-        alias?: string;
-        whopUsername?: string;
-        whopDisplayName?: string;
-        whopAvatarUrl?: string;
-      };
+      const capperInfo = capperInfoMap.get(follow.capperWhopUserId || '') || {};
       return {
         followPurchaseId: String(follow._id),
         capper: {
           userId: String(follow.capperUserId),
-          alias: capper.alias || capper.whopDisplayName || capper.whopUsername || 'Unknown',
-          avatarUrl: capper.whopAvatarUrl,
+          alias: capperInfo.alias || capperInfo.whopDisplayName || capperInfo.whopUsername || 'Unknown',
+          avatarUrl: capperInfo.whopAvatarUrl,
         },
         numPlaysPurchased: follow.numPlaysPurchased,
         numPlaysConsumed: follow.numPlaysConsumed,
@@ -159,4 +296,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

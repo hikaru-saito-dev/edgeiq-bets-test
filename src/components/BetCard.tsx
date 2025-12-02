@@ -72,9 +72,10 @@ interface BetCardProps {
     }>;
   };
   onUpdate?: () => void;
+  disableDelete?: boolean; // When true, hides the delete button (e.g., for followed bets)
 }
 
-export default function BetCard({ bet, onUpdate }: BetCardProps) {
+export default function BetCard({ bet, onUpdate, disableDelete = false }: BetCardProps) {
   const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [showParlayLegs, setShowParlayLegs] = useState(false);
@@ -634,7 +635,7 @@ export default function BetCard({ bet, onUpdate }: BetCardProps) {
           </Box>
 
           <Box display="flex" gap={1} justifyContent="flex-end">
-            {bet.result === 'pending' && (() => {
+            {!disableDelete && bet.result === 'pending' && (() => {
               const now = new Date();
               const startTime = new Date(bet.startTime);
               const canDelete = !bet.locked && now < startTime;

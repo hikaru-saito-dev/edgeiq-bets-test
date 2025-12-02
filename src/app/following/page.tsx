@@ -297,7 +297,7 @@ export default function FollowingPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
               >
-                <BetCard bet={bet} onUpdate={fetchFollowingFeed} />
+                <BetCard bet={bet} onUpdate={fetchFollowingFeed} disableDelete={true} />
               </motion.div>
             ))}
           </Box>

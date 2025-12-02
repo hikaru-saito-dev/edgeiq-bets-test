@@ -48,7 +48,7 @@ export default function FollowDetailModal({ open, onClose, entry }: FollowDetail
   }
 
   const followOffer = entry.followOffer;
-  const priceDollars = (followOffer.priceCents).toFixed(2);
+  const priceDollars = (followOffer.priceCents ).toFixed(2);
   const numPlays = followOffer.numPlays;
   const checkoutUrl = followOffer.checkoutUrl;
 

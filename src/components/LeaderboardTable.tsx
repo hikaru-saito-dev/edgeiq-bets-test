@@ -40,6 +40,8 @@ import { alpha, useTheme } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
 import InputAdornment from '@mui/material/InputAdornment';
 import FollowDetailModal from './FollowDetailModal';
+import { useAccess } from './AccessProvider';
+import { apiRequest } from '@/lib/apiClient';
 
 interface MembershipPlan {
   id: string;
@@ -87,6 +89,7 @@ export default function LeaderboardTable() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isDark = theme.palette.mode === 'dark';
+  const { userId, companyId } = useAccess();
   const [range, setRange] = useState<'all' | '30d' | '7d'>('all');
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -141,9 +144,53 @@ export default function LeaderboardTable() {
     setSelectedCompany(null);
   };
 
-  const handleViewFollow = (entry: LeaderboardEntry) => {
-    setSelectedFollowEntry(entry);
-    setFollowModalOpen(true);
+  const handleViewFollow = async (entry: LeaderboardEntry) => {
+    // Verify eligibility before showing modal
+    if (!userId || !companyId) {
+      toast.showError('You must be logged in to follow creators.');
+      return;
+    }
+
+    try {
+      // Call verification API
+      const verifyResponse = await apiRequest(
+        `/api/follow/verify?capperUserId=${encodeURIComponent(entry.userId)}`,
+        {
+          method: 'GET',
+          userId,
+          companyId,
+        }
+      );
+
+      if (!verifyResponse.ok) {
+        toast.showError('Failed to verify follow eligibility. Please try again.');
+        return;
+      }
+
+      const verifyData = await verifyResponse.json() as {
+        canFollow: boolean;
+        reason?: string;
+        message?: string;
+        remainingPlays?: number;
+      };
+
+      if (!verifyData.canFollow) {
+        // Show error message based on reason
+        if (verifyData.message) {
+          toast.showError(verifyData.message);
+        } else {
+          toast.showError('You cannot follow this creator.');
+        }
+        return;
+      }
+
+      // Verification passed - show modal
+      setSelectedFollowEntry(entry);
+      setFollowModalOpen(true);
+    } catch (error) {
+      console.error('Error verifying follow eligibility:', error);
+      toast.showError('An error occurred while verifying follow eligibility.');
+    }
   };
 
   const handleCloseFollowModal = () => {

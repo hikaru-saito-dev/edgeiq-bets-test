@@ -29,6 +29,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate price is positive
+    if (typeof priceCents !== 'number' || priceCents <= 0) {
+      return NextResponse.json(
+        { error: 'Price must be a positive number' },
+        { status: 400 }
+      );
+    }
+
+    // Validate numPlays is positive integer
+    if (typeof numPlays !== 'number' || numPlays <= 0 || !Number.isInteger(numPlays)) {
+      return NextResponse.json(
+        { error: 'Number of plays must be a positive integer' },
+        { status: 400 }
+      );
+    }
+
+    // Validate reasonable limits
+    if (numPlays > 1000) {
+      return NextResponse.json(
+        { error: 'Number of plays cannot exceed 1000' },
+        { status: 400 }
+      );
+    }
+
     const capper = await User.findOne({ whopUserId: userId, companyId: companyId });
     if (!capper) {
       return NextResponse.json({ error: 'Capper user not found' }, { status: 404 });

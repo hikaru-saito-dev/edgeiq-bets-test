@@ -110,7 +110,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     } catch (error) {
       return new Response('Invalid JSON payload', { status: 400 });
     }
- 
+
     // Handle app_payment.succeeded events
     if (webhookPayload.action === 'app_payment.succeeded') {
       waitUntil(handlePaymentSucceeded(webhookPayload.data));
@@ -136,6 +136,11 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
       return;
     }
 
+    // Only process paid payments
+    if (paymentData.status !== 'paid') {
+      return;
+    }
+
     // Extract metadata from payment data
     const metadata = paymentData.metadata || {};
 
@@ -147,10 +152,13 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
     const capperUserId = metadata.capperUserId;
     const capperCompanyId = metadata.capperCompanyId || paymentData.company_id;
     // Handle numPlays as either number or string
-    const numPlays =
+    const numPlaysRaw =
       typeof metadata.numPlays === 'string'
         ? parseInt(metadata.numPlays, 10)
-        : metadata.numPlays || 10;
+        : metadata.numPlays;
+    
+    // Ensure numPlays is a valid positive number
+    const numPlays = numPlaysRaw && numPlaysRaw > 0 ? numPlaysRaw : 10;
     const followerWhopUserId = paymentData.user_id;
     const paymentId = paymentData.id;
 
@@ -169,19 +177,22 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
     }
 
     // Find the follower user (the person who purchased)
+    // Search by whopUserId only - follower might be in a different company
+    // Try to find any user record with this whopUserId
     const followerUser = await User.findOne({
       whopUserId: followerWhopUserId,
-      companyId: capperCompanyId,
     });
 
-    if (!followerUser) {
+    // If not found, the user might not exist yet (they should exist if they logged in)
+    // For now, we'll return silently - in the future we might want to create them
+    if (!followerUser || !followerUser.whopUserId) {
       return;
     }
 
     // Find the capper (content creator being followed)
     const capperUser = await User.findById(capperUserId);
 
-    if (!capperUser) {
+    if (!capperUser || !capperUser.whopUserId) {
       return;
     }
 
@@ -190,11 +201,36 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
       return;
     }
 
+    // Verify follow offer is still enabled
+    if (!capperUser.followOfferEnabled) {
+      return;
+    }
+
+    // Verify follower is not trying to follow themselves (by whopUserId - person level)
+    if (followerUser.whopUserId === capperUser.whopUserId) {
+      return;
+    }
+
+    // Check if follower already has an active follow purchase for this capper (by whopUserId - person level)
+    // This prevents duplicate follows across all companies for the same person
+    const existingActiveFollow = await FollowPurchase.findOne({
+      followerWhopUserId: followerUser.whopUserId,
+      capperWhopUserId: capperUser.whopUserId,
+      status: 'active',
+    });
+
+    if (existingActiveFollow) {
+      return; // Already has an active follow
+    }
+
     // Create follow purchase record
+    // Use capperCompanyId for the companyId field (the company being followed)
     const followPurchase = new FollowPurchase({
       followerUserId: followerUser._id,
       capperUserId: capperUser._id,
-      companyId: capperCompanyId,
+      followerWhopUserId: followerUser.whopUserId,
+      capperWhopUserId: capperUser.whopUserId,
+      companyId: capperCompanyId, // Company of the capper being followed
       numPlaysPurchased: numPlays,
       numPlaysConsumed: 0,
       status: 'active',
