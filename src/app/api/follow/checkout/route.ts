@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import { User } from '@/models/User';
+import Whop from '@whop/sdk';
 
 export const runtime = 'nodejs';
 
 const WHOP_API_KEY = process.env.WHOP_API_KEY || '';
 const EDGEIQ_COMPANY_ID = process.env.NEXT_PUBLIC_WHOP_COMPANY_ID || '';
+// Product ID in Whop that represents the "follow plays" product
+// You must set this in your environment (server-side) configuration.
+const WHOP_FOLLOW_PRODUCT_ID = process.env.WHOP_FOLLOW_PRODUCT_ID || '';
+
+// Reuse a single Whop client instance across requests
+const whopClient = new Whop({
+  apiKey: WHOP_API_KEY,
+});
 
 export async function POST(request: NextRequest) {
   try {
@@ -66,46 +75,43 @@ export async function POST(request: NextRequest) {
     }
 
     const capperIdString = String(capper._id);
-    
-    const checkoutResponse = await fetch(
-      'https://api.whop.com/api/v1/checkout_configurations',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${WHOP_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          plan: {
-            company_id: EDGEIQ_COMPANY_ID,
-            initial_price: priceCents,
-            plan_type: 'one_time',
-            currency: 'usd',
-          },
-          metadata: {
-            followPurchase: true,
-            project: "Bet",
-            capperUserId: capperIdString, // Unique MongoDB _id per capper - this is the primary identifier
-            capperCompanyId: capper.companyId || companyId,
-            numPlays: numPlays,
-          },
-          affiliate_code: capperUsername,
-        }),
-      }
-    );
 
-    if (!checkoutResponse.ok) {
-      const errorText = await checkoutResponse.text();
-      console.error('Whop checkout creation failed:', errorText);
+    if (!WHOP_API_KEY || !EDGEIQ_COMPANY_ID || !WHOP_FOLLOW_PRODUCT_ID) {
       return NextResponse.json(
-        { error: 'Failed to create checkout link' },
+        { error: 'Whop configuration missing on server' },
         { status: 500 }
       );
     }
 
-    const checkout = await checkoutResponse.json();
-    const planId = checkout.plan?.id;
-    const purchaseUrl = checkout.purchase_url;
+    // Create (or recreate) a Whop plan for this capper's follow offer.
+    // Then create a checkout configuration with metadata so webhooks can
+    // identify which project/capper this payment is for.
+    const plan = await whopClient.plans.create({
+      company_id: EDGEIQ_COMPANY_ID,
+      product_id: WHOP_FOLLOW_PRODUCT_ID,
+      initial_price: priceCents,
+      plan_type: 'one_time',
+      currency: 'usd',
+      title: `Follow ${capperUsername} - ${numPlays} plays`,
+    });
+
+    const planId = plan.id;
+
+    // Attach metadata via a checkout configuration so that every resulting
+    // payment includes project/capper information.
+    const checkoutConfig = await whopClient.checkoutConfigurations.create({
+      plan_id: planId,
+      affiliate_code: capperUsername,
+      metadata: {
+        followPurchase: true,
+        project: 'Bet',
+        capperUserId: capperIdString,
+        capperCompanyId: capper.companyId || companyId,
+        numPlays,
+      },
+    });
+
+    const purchaseUrl = checkoutConfig.purchase_url;
 
     if (!planId || !purchaseUrl) {
       return NextResponse.json(

@@ -17,7 +17,7 @@ const FollowedBetActionSchema = new Schema<IFollowedBetAction>({
   followerWhopUserId: { type: String, required: true, index: true },
   originalBetId: { type: Schema.Types.ObjectId, ref: 'Bet', required: true, index: true },
   action: { type: String, enum: ['follow', 'fade'], required: true },
-  followedBetId: { type: Schema.Types.ObjectId, ref: 'Bet', index: true }, // Only set if action is 'follow'
+  followedBetId: { type: Schema.Types.ObjectId, ref: 'Bet' }, // Only set if action is 'follow' - removed index: true to avoid duplicate
 }, {
   timestamps: true,
 });
