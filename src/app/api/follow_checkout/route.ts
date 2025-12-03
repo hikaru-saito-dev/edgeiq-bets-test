@@ -69,7 +69,6 @@ function verifyWhopSignature(
       Buffer.from(computedSignature, 'hex')
     );
   } catch (error) {
-    console.error('[FollowPurchase] Error verifying webhook signature:', error);
     return false;
   }
 }
@@ -115,16 +114,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     try {
       webhookPayload = JSON.parse(requestBodyText) as WhopWebhookPayload;
     } catch (error) {
-      console.error('[FollowPurchase] Failed to parse webhook payload:', error);
       return new Response('Invalid JSON payload', { status: 400 });
     }
-
-    // Log full webhook payload for debugging
-    console.error('[FollowPurchase] Received webhook:', {
-      action: webhookPayload.action,
-      dataKeys: Object.keys(webhookPayload.data || {}),
-      fullPayload: JSON.stringify(webhookPayload, null, 2),
-    });
 
     // Handle payment succeeded events
     // Whop can send either "payment.succeeded" or "app_payment.succeeded"
@@ -132,23 +123,14 @@ export async function POST(request: NextRequest): Promise<Response> {
       webhookPayload.action === 'payment.succeeded' ||
       webhookPayload.action === 'app_payment.succeeded'
     ) {
-      // Process async and capture result for logging
-      const resultPromise = handlePaymentSucceeded(webhookPayload.data);
-      waitUntil(resultPromise);
-      
-      // Log immediately for debugging
-      console.error('[FollowPurchase] Webhook received - processing async:', {
-        paymentId: webhookPayload.data?.id,
-        planId: webhookPayload.data?.plan_id,
-        action: webhookPayload.action,
-      });
+      // Process async
+      waitUntil(handlePaymentSucceeded(webhookPayload.data));
     }
 
     // Return 200 OK quickly to prevent webhook retries
     // Return JSON response for compatibility
     return Response.json({ success: true }, { status: 200 });
   } catch (error) {
-    console.error('[FollowPurchase] Error handling webhook:', error);
     return new Response('Internal server error', { status: 500 });
   }
 }
@@ -159,53 +141,72 @@ export async function POST(request: NextRequest): Promise<Response> {
  */
 async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): Promise<void> {
   try {
-    // Log with console.error so it appears in Vercel logs
-    console.error('[FollowPurchase] Starting payment processing:', JSON.stringify({
-      paymentId: paymentData.id,
-      planId: paymentData.plan_id,
-      status: paymentData.status,
-      fullPaymentData: paymentData,
-    }, null, 2));
-
     await connectDB();
 
     const planId = paymentData.plan_id;
     if (!planId) {
-      console.error('[FollowPurchase] Missing plan_id in webhook payload');
       return;
     }
 
     // Only process paid payments
     if (paymentData.status !== 'paid') {
-      console.error('[FollowPurchase] Payment status is not paid:', paymentData.status);
       return;
     }
 
-    // Extract metadata from payment data - check both direct metadata and nested locations
-    let metadata = paymentData.metadata || {};
+    // Extract metadata from payment data - check multiple possible locations
+    // Whop stores metadata in different places depending on the webhook structure
+    let metadata: Record<string, unknown> = {};
     
-    // Whop sometimes stores metadata in different locations, check payment object structure
-    const paymentObj = paymentData as unknown as {
-      metadata?: Record<string, unknown>;
-      checkout_configuration?: {
-        metadata?: Record<string, unknown>;
-      };
-    };
+    // Try direct metadata first
+    if (paymentData.metadata && typeof paymentData.metadata === 'object') {
+      metadata = paymentData.metadata as Record<string, unknown>;
+    }
     
+    // If empty, try nested locations
     if (!metadata || Object.keys(metadata).length === 0) {
-      metadata = paymentObj.checkout_configuration?.metadata || {};
+      const paymentObj = paymentData as unknown as {
+        checkout_configuration?: {
+          metadata?: Record<string, unknown>;
+        };
+        plan?: {
+          metadata?: Record<string, unknown>;
+        };
+      };
+      
+      metadata = paymentObj.checkout_configuration?.metadata || 
+                 paymentObj.plan?.metadata || 
+                 {};
+    }
+    
+    // If still empty, fetch metadata from the plan via API
+    if ((!metadata || Object.keys(metadata).length === 0) && planId) {
+      try {
+        const planResponse = await fetch(
+          `https://api.whop.com/api/v1/plans/${planId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${process.env.WHOP_API_KEY || ''}`,
+            },
+          }
+        );
+        
+        if (planResponse.ok) {
+          const planData = await planResponse.json();
+          if (planData.metadata && typeof planData.metadata === 'object') {
+            metadata = planData.metadata as Record<string, unknown>;
+          }
+        }
+      } catch (fetchError) {
+        // If fetching fails, continue with empty metadata (will be rejected below)
+      }
     }
 
-    // Log with console.error so it appears in Vercel logs
-    console.error('[FollowPurchase] Extracted metadata:', JSON.stringify({
-      metadataKeys: Object.keys(metadata),
-      metadata: metadata,
-      hasFollowPurchase: !!metadata.followPurchase,
-    }, null, 2));
-
     // Only process follow purchase webhooks
-    if (!metadata.followPurchase) {
-      console.error('[FollowPurchase] Not a follow purchase webhook. Metadata:', JSON.stringify(metadata));
+    if (!metadata || !metadata.followPurchase) {
+      // Log only when we have a plan_id but no metadata - indicates a potential issue
+      if (planId && (!metadata || Object.keys(metadata).length === 0)) {
+        console.error('[FollowPurchase] Missing metadata for plan:', planId);
+      }
       return;
     }
     const project = metadata.project;
@@ -218,22 +219,15 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
     const numPlaysRaw =
       typeof metadata.numPlays === 'string'
         ? parseInt(metadata.numPlays, 10)
-        : metadata.numPlays;
+        : (typeof metadata.numPlays === 'number' ? metadata.numPlays : undefined);
     
     // Ensure numPlays is a valid positive number
-    const numPlays = numPlaysRaw && numPlaysRaw > 0 ? numPlaysRaw : 10;
+    const numPlays = (numPlaysRaw && typeof numPlaysRaw === 'number' && numPlaysRaw > 0) ? numPlaysRaw : 10;
     const followerWhopUserId = paymentData.user_id;
     const paymentId = paymentData.id;
 
     // Validate required fields
     if (!capperUserId || !capperCompanyId || !followerWhopUserId || !paymentId) {
-      console.error('[FollowPurchase] Missing required fields:', {
-        capperUserId: !!capperUserId,
-        capperCompanyId: !!capperCompanyId,
-        followerWhopUserId: !!followerWhopUserId,
-        paymentId: !!paymentId,
-        metadata: JSON.stringify(metadata),
-      });
       return;
     }
 
@@ -255,7 +249,6 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
 
     // If not found, the user might not exist yet (they should exist if they logged in)
     if (!followerUser || !followerUser.whopUserId) {
-      console.error('[FollowPurchase] Follower user not found:', followerWhopUserId);
       return;
     }
 
@@ -263,30 +256,16 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
     const capperUser = await User.findById(capperUserId);
 
     if (!capperUser || !capperUser.whopUserId) {
-      console.error('[FollowPurchase] Capper user not found:', capperUserId);
       return;
-    }
-
-    // Note: We use metadata.capperUserId as the primary identifier (already found capper above)
-    // Plan ID check is informational only - metadata.capperUserId is the source of truth
-    if (capperUser.followOfferPlanId && capperUser.followOfferPlanId !== planId) {
-      console.error('[FollowPurchase] Warning - Plan ID mismatch (using metadata.capperUserId as primary):', {
-        expected: capperUser.followOfferPlanId,
-        received: planId,
-        capperUserId: String(capperUser._id),
-      });
-      // Continue processing - metadata.capperUserId uniquely identifies the capper
     }
 
     // Verify follow offer is still enabled
     if (!capperUser.followOfferEnabled) {
-      console.error('[FollowPurchase] Follow offer not enabled for capper:', String(capperUser._id));
       return;
     }
 
     // Verify follower is not trying to follow themselves (by whopUserId - person level)
     if (followerUser.whopUserId === capperUser.whopUserId) {
-      console.error('[FollowPurchase] User trying to follow themselves:', followerUser.whopUserId);
       return;
     }
 
@@ -299,7 +278,6 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
     });
 
     if (existingActiveFollow) {
-      console.error('[FollowPurchase] Already has active follow:', String(existingActiveFollow._id));
       return; // Already has an active follow
     }
 
@@ -319,19 +297,7 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
     });
 
     await followPurchase.save();
-    // Log success with console.error so it appears in Vercel logs
-    console.error('[FollowPurchase] ✅ SUCCESS - Created follow purchase:', JSON.stringify({
-      followPurchaseId: String(followPurchase._id),
-      followerWhopUserId: followPurchase.followerWhopUserId,
-      capperWhopUserId: followPurchase.capperWhopUserId,
-      paymentId: followPurchase.paymentId,
-    }, null, 2));
   } catch (error) {
-    // Log errors for debugging
-    console.error('[FollowPurchase] Error processing payment webhook:', error);
-    if (error instanceof Error) {
-      console.error('[FollowPurchase] Error message:', error.message);
-      console.error('[FollowPurchase] Error stack:', error.stack);
-    }
+    // Silent fail - webhook already returned 200 OK
   }
 }

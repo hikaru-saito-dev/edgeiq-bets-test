@@ -3,6 +3,7 @@ import connectDB from '@/lib/db';
 import { User } from '@/models/User';
 import { Bet, IBet } from '@/models/Bet';
 import { FollowedBetAction } from '@/models/FollowedBetAction';
+import { FollowPurchase } from '@/models/FollowPurchase';
 import mongoose from 'mongoose';
 
 export const runtime = 'nodejs';
@@ -170,6 +171,32 @@ export async function POST(request: NextRequest) {
             return newLeg;
           })
         );
+      }
+
+      // Decrement plays consumed for the follow purchase
+      // Find the active follow purchase for this follower and capper
+      if (originalBet.whopUserId && followerUser.whopUserId) {
+        try {
+          const activeFollow = await FollowPurchase.findOne({
+            followerWhopUserId: followerUser.whopUserId,
+            capperWhopUserId: originalBet.whopUserId,
+            status: 'active',
+          });
+
+          if (activeFollow && activeFollow.numPlaysConsumed < activeFollow.numPlaysPurchased) {
+            activeFollow.numPlaysConsumed += 1;
+            
+            // If all plays consumed, mark as completed
+            if (activeFollow.numPlaysConsumed >= activeFollow.numPlaysPurchased) {
+              activeFollow.status = 'completed';
+            }
+            
+            await activeFollow.save();
+          }
+        } catch (followError) {
+          // Don't fail the action if follow tracking fails
+          console.error('Error updating follow purchase plays:', followError);
+        }
       }
     }
 

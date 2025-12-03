@@ -179,9 +179,9 @@ export async function GET(request: NextRequest) {
     const search = (searchParams.get('search') || '').trim();
     const marketType = searchParams.get('marketType')?.trim();
 
-    // Build match query - ALL users see only their own bets
+    // Build match query - ALL users see only their own bets (by whopUserId for cross-company)
     const matchQuery: Record<string, unknown> = {
-      userId: user._id,
+      whopUserId: user.whopUserId,
       parlayId: { $exists: false }, // Exclude parlay legs from top-level listing
     };
 
@@ -224,7 +224,7 @@ export async function GET(request: NextRequest) {
                 $expr: {
                   $and: [
                     { $eq: ['$parlayId', '$$parlayBetId'] },
-                    { $eq: ['$userId', user._id] },
+                    { $eq: ['$whopUserId', user.whopUserId] },
                   ],
                 },
               },
