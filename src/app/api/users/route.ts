@@ -61,9 +61,31 @@ export async function GET(request: NextRequest) {
     }
 
     // Use aggregation pipeline with $facet for efficient count + fetch in one query
+    // Sort by role priority (companyOwner > owner > admin > member), then by alias/name
     const pipeline: PipelineStage[] = [
       { $match: matchQuery },
-      { $sort: { createdAt: -1 } },
+      {
+        $addFields: {
+          roleOrder: {
+            $switch: {
+              branches: [
+                { case: { $eq: ['$role', 'companyOwner'] }, then: 1 },
+                { case: { $eq: ['$role', 'owner'] }, then: 2 },
+                { case: { $eq: ['$role', 'admin'] }, then: 3 },
+                { case: { $eq: ['$role', 'member'] }, then: 4 },
+              ],
+              default: 4
+            }
+          },
+          displayName: {
+            $ifNull: [
+              '$whopDisplayName',
+              { $ifNull: ['$alias', { $ifNull: ['$whopUsername', ''] }] }
+            ]
+          }
+        }
+      },
+      { $sort: { roleOrder: 1, displayName: 1 } },
       {
         $project: {
           whopUserId: 1,
