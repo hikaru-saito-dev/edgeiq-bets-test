@@ -177,35 +177,44 @@ async function handlePaymentSucceeded(paymentData: WhopWebhookPayload['data']): 
                  paymentObj.plan?.metadata || 
                  {};
     }
-    
-    // If still empty, fetch metadata from the plan via API
+
+    // Fallback: If metadata is still empty, look up the user by plan_id
+    // We store followOfferPlanId on the User model, so we can reconstruct metadata
+    // This is necessary because Whop doesn't store metadata on the plan object
     if ((!metadata || Object.keys(metadata).length === 0) && planId) {
       try {
-        const planResponse = await fetch(
-          `https://api.whop.com/api/v1/plans/${planId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${process.env.WHOP_API_KEY || ''}`,
-            },
-          }
-        );
-        
-        if (planResponse.ok) {
-          const planData = await planResponse.json();
-          if (planData.metadata && typeof planData.metadata === 'object') {
-            metadata = planData.metadata as Record<string, unknown>;
-          }
+        const capperUser = await User.findOne({
+          followOfferPlanId: planId,
+          followOfferEnabled: true,
+        });
+
+        if (capperUser && capperUser.whopUserId) {
+          // Reconstruct metadata from user's follow offer settings
+          metadata = {
+            followPurchase: true,
+            project: 'Bet',
+            capperUserId: String(capperUser._id),
+            capperCompanyId: capperUser.companyId || paymentData.company_id,
+            numPlays: capperUser.followOfferNumPlays || 10,
+          };
+        } else {
+          // User not found or follow offer disabled
+          console.error('[FollowPurchase] User lookup failed for plan:', planId, {
+            userFound: !!capperUser,
+            followEnabled: capperUser?.followOfferEnabled,
+          });
         }
-      } catch (fetchError) {
-        // If fetching fails, continue with empty metadata (will be rejected below)
+      } catch (lookupError) {
+        // If lookup fails, log the error
+        console.error('[FollowPurchase] Error looking up user by plan_id:', planId, lookupError);
       }
     }
 
     // Only process follow purchase webhooks
     if (!metadata || !metadata.followPurchase) {
-      // Log only when we have a plan_id but no metadata - indicates a potential issue
+      // Log when we have a plan_id but no metadata - indicates a potential issue
       if (planId && (!metadata || Object.keys(metadata).length === 0)) {
-        console.error('[FollowPurchase] Missing metadata for plan:', planId);
+        console.error('[FollowPurchase] Missing metadata for plan:', planId, paymentData);
       }
       return;
     }

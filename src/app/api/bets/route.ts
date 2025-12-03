@@ -740,30 +740,35 @@ export async function POST(request: NextRequest) {
     const bet = await Bet.create(betData);
 
     // Track consumed plays for follow purchases (only for main bets, not parlay legs)
+    // Use atomic $inc operator to prevent race conditions
     try {
       const { FollowPurchase } = await import('@/models/FollowPurchase');
       
-      // Find all active follow purchases for this capper (by whopUserId - person level)
-      // This tracks plays across all companies where this person is followed
+      // Use atomic bulk update to increment plays for all active follows
+      // This prevents race conditions where multiple requests try to increment simultaneously
       if (user.whopUserId) {
-        const activeFollows = await FollowPurchase.find({
-          capperWhopUserId: user.whopUserId,
-          status: 'active',
-        });
-
-        // For each active follow, increment consumed plays if there are remaining plays
-        for (const follow of activeFollows) {
-          if (follow.numPlaysConsumed < follow.numPlaysPurchased) {
-            follow.numPlaysConsumed += 1;
-            
-            // If all plays consumed, mark as completed
-            if (follow.numPlaysConsumed >= follow.numPlaysPurchased) {
-              follow.status = 'completed';
-            }
-            
-            await follow.save();
-          }
-        }
+        // Atomic update using aggregation pipeline to increment and update status in one operation
+        await FollowPurchase.updateMany(
+          {
+            capperWhopUserId: user.whopUserId,
+            status: 'active',
+            $expr: { $lt: ['$numPlaysConsumed', '$numPlaysPurchased'] },
+          },
+          [
+            {
+              $set: {
+                numPlaysConsumed: { $add: ['$numPlaysConsumed', 1] },
+                status: {
+                  $cond: {
+                    if: { $gte: [{ $add: ['$numPlaysConsumed', 1] }, '$numPlaysPurchased'] },
+                    then: 'completed',
+                    else: 'active',
+                  },
+                },
+              },
+            },
+          ]
+        );
       }
     } catch (followError) {
       // Don't fail bet creation if follow tracking fails

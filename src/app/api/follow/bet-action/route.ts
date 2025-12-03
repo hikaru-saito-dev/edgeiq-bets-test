@@ -173,31 +173,9 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Decrement plays consumed for the follow purchase
-      // Find the active follow purchase for this follower and capper
-      if (originalBet.whopUserId && followerUser.whopUserId) {
-        try {
-          const activeFollow = await FollowPurchase.findOne({
-            followerWhopUserId: followerUser.whopUserId,
-            capperWhopUserId: originalBet.whopUserId,
-            status: 'active',
-          });
-
-          if (activeFollow && activeFollow.numPlaysConsumed < activeFollow.numPlaysPurchased) {
-            activeFollow.numPlaysConsumed += 1;
-            
-            // If all plays consumed, mark as completed
-            if (activeFollow.numPlaysConsumed >= activeFollow.numPlaysPurchased) {
-              activeFollow.status = 'completed';
-            }
-            
-            await activeFollow.save();
-          }
-        } catch (followError) {
-          // Don't fail the action if follow tracking fails
-          console.error('Error updating follow purchase plays:', followError);
-        }
-      }
+      // Note: Plays are NOT consumed here when following a bet.
+      // Plays are consumed when the capper creates the bet (in /api/bets POST endpoint),
+      // so we don't need to consume them again when a follower follows the bet.
     }
 
     // Create the action record
