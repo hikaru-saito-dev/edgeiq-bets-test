@@ -32,6 +32,8 @@ export interface IUser extends Document {
   webhooks?: Webhook[]; // Array of webhooks with names
   notifyOnSettlement?: boolean; // Whether to send notifications when bets are settled
   onlyNotifyWinningSettlements?: boolean; // If true, only send settlement webhooks for winning bets
+  followingDiscordWebhook?: string; // Discord webhook URL for following page notifications
+  followingWhopWebhook?: string; // Whop webhook URL for following page notifications
   membershipPlans?: MembershipPlan[]; // Array of membership plans for this Whop (only for owners)
   membershipUrl?: string; // Legacy: Primary membership URL (deprecated, use membershipPlans)
   optIn: boolean; // Only owners can opt-in to leaderboard
@@ -83,6 +85,8 @@ const UserSchema = new Schema<IUser>({
   webhooks: { type: [WebhookSchema], default: [] }, // Array of webhooks with names
   notifyOnSettlement: { type: Boolean, default: false },
   onlyNotifyWinningSettlements: { type: Boolean, default: false }, // Only send settlement webhooks for winning bets
+  followingDiscordWebhook: { type: String, trim: true }, // Discord webhook URL for following page notifications
+  followingWhopWebhook: { type: String, trim: true }, // Whop webhook URL for following page notifications
   membershipPlans: { type: [MembershipPlanSchema], default: [] }, //only for owners
   membershipUrl: { type: String }, // Legacy field for backward compatibility
   optIn: { type: Boolean, default: false }, // Default false, only owners can opt-in

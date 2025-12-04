@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { 
   notifyBetCreated, 
   notifyBetDeleted,
+  notifyFollowers,
 } from '@/lib/betNotifications';
 import {
   validateMoneylineBet,
@@ -902,6 +903,14 @@ export async function POST(request: NextRequest) {
     });
 
     await notifyBetCreated(bet, user, finalCompanyId);
+
+    // Notify all followers of this creator
+    try {
+      await notifyFollowers(bet, user);
+    } catch (followError) {
+      // Don't fail bet creation if follower notification fails
+      console.error('Error notifying followers:', followError);
+    }
 
     return NextResponse.json({ 
       bet, 
