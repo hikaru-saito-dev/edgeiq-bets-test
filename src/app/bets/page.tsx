@@ -364,13 +364,6 @@ export default function BetsPage() {
                     <SearchIcon sx={{ color: 'var(--text-muted)' }} />
                   </InputAdornment>
                 ),
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => { setPage(1); fetchBets(); }} sx={{ color: 'var(--app-text)' }}>
-                      <SearchIcon />
-                    </IconButton>
-                  </InputAdornment>
-                ),
               }}
             />
           </Paper>

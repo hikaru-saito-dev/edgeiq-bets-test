@@ -39,6 +39,7 @@ import { useToast } from './ToastProvider';
 import { alpha, useTheme } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
 import InputAdornment from '@mui/material/InputAdornment';
+import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import FollowDetailModal from './FollowDetailModal';
 import { useAccess } from './AccessProvider';
 import { apiRequest } from '@/lib/apiClient';
@@ -325,23 +326,6 @@ export default function LeaderboardTable() {
               ),
             }}
           />
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => { setPage(1); fetchLeaderboard(); }}
-            sx={{
-              color: 'var(--app-text)',
-              borderColor: controlBorder,
-              backgroundColor: controlBg,
-              '&:hover': {
-                borderColor: theme.palette.primary.main,
-                backgroundColor: controlHoverBg,
-              },
-              display: { xs: 'none', sm: 'flex' },
-            }}
-          >
-            Search
-          </Button>
           <Box display="flex" alignItems="center" gap={1} ml={{ xs: 0, sm: 2 }}>
             <Typography variant="body2" sx={{ color: 'var(--app-text)', whiteSpace: 'nowrap', fontSize: { xs: '0.875rem', sm: '1rem' } }}>Page size</Typography>
             <FormControl size="small">
@@ -538,7 +522,12 @@ export default function LeaderboardTable() {
                       {renderSortIcon('longestStreak')}
                     </Box>
                   </TableCell>
-                  <TableCell align="center" sx={{ color: 'var(--app-text)', fontWeight: 600 }}><strong>Action</strong></TableCell>
+                  <TableCell align="center" sx={{ color: 'var(--app-text)', fontWeight: 600 }}>
+                    <strong>Membership</strong>
+                  </TableCell>
+                  <TableCell align="center" sx={{ color: 'var(--app-text)', fontWeight: 600 }}>
+                    <strong>Follow</strong>
+                  </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -608,45 +597,53 @@ export default function LeaderboardTable() {
                         </TableCell>
                         <TableCell align="center" sx={{ color: 'var(--app-text)' }}>{entry.longestStreak}</TableCell>
                         <TableCell align="center">
-                          <Box display="flex" flexDirection="column" gap={1} alignItems="center">
-                            {entry.membershipPlans && entry.membershipPlans.length > 0 ? (
-                              <Button
-                                variant="contained"
-                                size="small"
-                                onClick={() => handleViewMembership(entry)}
-                                sx={{
-                                  background: 'linear-gradient(135deg, #22c55e, #059669)',
-                                  color: 'white',
-                                  '&:hover': {
-                                    background: 'linear-gradient(135deg, #16a34a, #047857)',
-                                  },
-                                }}
-                              >
-                                View Membership
-                              </Button>
-                            ) : (
-                              <Typography variant="caption" sx={{ color: 'var(--text-muted)' }}>
-                                No membership
-                              </Typography>
-                            )}
-                            {entry.followOffer?.enabled && (
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={() => handleViewFollow(entry)}
-                                sx={{
-                                  borderColor: theme.palette.primary.main,
-                                  color: theme.palette.primary.main,
-                                  '&:hover': {
-                                    borderColor: theme.palette.primary.dark,
-                                    backgroundColor: alpha(theme.palette.primary.main, 0.1),
-                                  },
-                                }}
-                              >
-                                Follow
-                              </Button>
-                            )}
-                          </Box>
+                          {entry.membershipPlans && entry.membershipPlans.length > 0 ? (
+                            <Button
+                              variant="contained"
+                              size="small"
+                              onClick={() => handleViewMembership(entry)}
+                              sx={{
+                                background: 'linear-gradient(135deg, #22c55e, #059669)',
+                                color: 'white',
+                                textTransform: 'none',
+                                fontWeight: 600,
+                                borderRadius: 9999,
+                                px: 2.5,
+                                '&:hover': {
+                                  background: 'linear-gradient(135deg, #16a34a, #047857)',
+                                },
+                              }}
+                            >
+                              View Membership
+                            </Button>
+                          ) : (
+                            <Typography variant="caption" sx={{ color: 'var(--text-muted)' }}>
+                              No membership
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell align="center">
+                          {entry.followOffer?.enabled && (
+                            <Button
+                              variant="contained"
+                              size="small"
+                              onClick={() => handleViewFollow(entry)}
+                              startIcon={<PersonAddAlt1Icon fontSize="small" />}
+                              sx={{
+                                background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                                color: 'white',
+                                textTransform: 'none',
+                                fontWeight: 600,
+                                borderRadius: 9999,
+                                px: 2.5,
+                                '&:hover': {
+                                  background: 'linear-gradient(135deg, #16a34a, #15803d)',
+                                },
+                              }}
+                            >
+                              Follow
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
