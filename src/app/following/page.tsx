@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -16,7 +16,12 @@ import {
   Avatar,
   Button,
   Collapse,
+  TextField,
+  InputAdornment,
+  Tabs,
+  Tab,
 } from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
 import BetCard from '@/components/BetCard';
 import { useToast } from '@/components/ToastProvider';
 import { motion } from 'framer-motion';
@@ -89,6 +94,8 @@ export default function FollowingPage() {
   const [total, setTotal] = useState(0);
   const [selectedFollowId, setSelectedFollowId] = useState<string>('all');
   const [showFollows, setShowFollows] = useState(false);
+  const [search, setSearch] = useState('');
+  const [selectedMarketType, setSelectedMarketType] = useState<string>('All');
 
   const fetchFollowingFeed = async () => {
     if (!isAuthorized || accessLoading) return;
@@ -99,6 +106,17 @@ export default function FollowingPage() {
         page: String(page),
         pageSize: String(pageSize),
       });
+      
+      // Add search parameter if provided (use debouncedSearch for API call)
+      if (debouncedSearch.trim()) {
+        params.set('search', debouncedSearch.trim());
+      }
+      
+      // Add marketType filter if not "All"
+      if (selectedMarketType !== 'All') {
+        params.set('marketType', selectedMarketType);
+      }
+      
       const response = await apiRequest(`/api/follow/feed?${params.toString()}`, { userId, companyId });
       if (!response.ok) {
         throw new Error('Failed to fetch following feed');
@@ -116,12 +134,39 @@ export default function FollowingPage() {
     }
   };
 
+  // Debounced search - separate state to prevent race conditions
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const previousSearchRef = useRef(search);
+  
+  useEffect(() => {
+    // If not authorized or loading, sync immediately (no API calls will be made anyway)
+    if (!isAuthorized || accessLoading) {
+      setDebouncedSearch(search);
+      previousSearchRef.current = search;
+      return;
+    }
+    
+    // Debounce search updates to avoid excessive API calls
+    const timeoutId = setTimeout(() => {
+      const previousSearch = previousSearchRef.current;
+      setDebouncedSearch(search);
+      previousSearchRef.current = search;
+      // Reset page when search actually changed (after debounce)
+      if (search !== previousSearch) {
+        setPage(1);
+      }
+    }, 300); // 300ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [search, isAuthorized, accessLoading]);
+
+  // Main effect - fetches data when dependencies change (uses debouncedSearch, not search)
   useEffect(() => {
     if (isAuthorized && !accessLoading) {
       fetchFollowingFeed();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthorized, accessLoading, page, pageSize]);
+  }, [isAuthorized, accessLoading, page, pageSize, debouncedSearch, selectedMarketType]);
 
   if (accessLoading) {
     return (
@@ -143,13 +188,36 @@ export default function FollowingPage() {
 
   const controlBg = alpha(theme.palette.background.paper, isDark ? 0.6 : 0.98);
   const controlBorder = alpha(theme.palette.primary.main, isDark ? 0.45 : 0.25);
+  const controlStyles = {
+    '& .MuiOutlinedInput-root': {
+      color: 'var(--app-text)',
+      backgroundColor: controlBg,
+      '& fieldset': { borderColor: controlBorder },
+      '&:hover fieldset': { borderColor: theme.palette.primary.main },
+      '&.Mui-focused fieldset': {
+        borderColor: theme.palette.primary.main,
+        boxShadow: `0 0 0 2px ${alpha(theme.palette.primary.main, 0.15)}`,
+      },
+    },
+    '& .MuiInputBase-input::placeholder': {
+      color: 'var(--text-muted)',
+      opacity: 1,
+    },
+  };
 
+  // Client-side filtering by creator (for display only)
+  // Note: Pagination and totals are server-side based on all bets
   const filteredBets =
     selectedFollowId === 'all'
       ? bets
       : bets.filter(
           (bet) => bet.followInfo?.followPurchaseId === selectedFollowId
         );
+  
+  // Calculate filtered total for display
+  const filteredTotal = selectedFollowId === 'all' 
+    ? total 
+    : filteredBets.length;
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -215,14 +283,17 @@ export default function FollowingPage() {
                     }}
                   >
                     <Box display="flex" alignItems="center" gap={2} mb={1}>
-                      {follow.capper.avatarUrl && (
-                        <Avatar src={follow.capper.avatarUrl} sx={{ width: 40, height: 40 }}>
-                          {follow.capper.alias.charAt(0).toUpperCase()}
-                        </Avatar>
-                      )}
+                      <Avatar 
+                        src={follow.capper.avatarUrl} 
+                        sx={{ width: 40, height: 40 }}
+                      >
+                        {follow.capper.alias && follow.capper.alias.length > 0
+                          ? follow.capper.alias.charAt(0).toUpperCase()
+                          : '?'}
+                      </Avatar>
                       <Box flex={1}>
                         <Typography variant="body1" sx={{ color: 'var(--app-text)', fontWeight: 600 }}>
-                          {follow.capper.alias}
+                          {follow.capper.alias || 'Unknown'}
                         </Typography>
                         <Typography variant="caption" sx={{ color: 'var(--text-muted)' }}>
                           {follow.remainingPlays} of {follow.numPlaysPurchased} plays remaining
@@ -246,7 +317,7 @@ export default function FollowingPage() {
                       <Box
                         sx={{
                           height: '100%',
-                          width: `${(follow.remainingPlays / follow.numPlaysPurchased) * 100}%`,
+                          width: `${follow.numPlaysPurchased > 0 ? Math.max(0, Math.min(100, (follow.remainingPlays / follow.numPlaysPurchased) * 100)) : 0}%`,
                           background: 'linear-gradient(90deg, #3b82f6, #2563eb)',
                           transition: 'width 0.3s ease',
                         }}
@@ -258,6 +329,68 @@ export default function FollowingPage() {
             </Collapse>
           </Paper>
         )}
+
+        {/* Search and Filters */}
+        <Paper
+          sx={{
+            p: 2,
+            mb: 3,
+            bgcolor: 'var(--surface-bg)',
+            backdropFilter: 'blur(6px)',
+            borderRadius: 2,
+            border: `1px solid ${alpha(theme.palette.primary.main, isDark ? 0.3 : 0.2)}`,
+          }}
+        >
+          <Box display="flex" flexDirection="column" gap={2}>
+            {/* Search Bar */}
+            <TextField
+              fullWidth
+              placeholder="Search bets (team, sport, league...)"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              size="small"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ color: 'var(--text-muted)' }} />
+                  </InputAdornment>
+                ),
+              }}
+              sx={controlStyles}
+            />
+
+            {/* Market Type Filter */}
+            <Tabs
+              value={selectedMarketType}
+              onChange={(_, value) => {
+                setSelectedMarketType(value);
+                setPage(1);
+              }}
+              variant="scrollable"
+              scrollButtons="auto"
+              sx={{
+                '& .MuiTab-root': {
+                  color: 'var(--text-muted)',
+                  textTransform: 'none',
+                  minHeight: 40,
+                  '&.Mui-selected': {
+                    color: theme.palette.primary.main,
+                  },
+                },
+                '& .MuiTabs-indicator': {
+                  backgroundColor: theme.palette.primary.main,
+                },
+              }}
+            >
+              <Tab label="All" value="All" />
+              <Tab label="Moneyline" value="ML" />
+              <Tab label="Spread" value="Spread" />
+              <Tab label="Total" value="Total" />
+              <Tab label="Player Prop" value="Player Prop" />
+              <Tab label="Parlay" value="Parlay" />
+            </Tabs>
+          </Box>
+        </Paper>
 
         {/* Page Size Control */}
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
@@ -288,7 +421,7 @@ export default function FollowingPage() {
               </Select>
             </FormControl>
             <Typography variant="body2" sx={{ color: 'var(--text-muted)' }}>
-              {total > 0 ? `of ${total} bets` : 'No bets'}
+              {filteredTotal > 0 ? `of ${filteredTotal} bets${selectedFollowId !== 'all' ? ' (filtered)' : ''}` : 'No bets'}
             </Typography>
           </Box>
           {follows.length > 0 && (
@@ -300,8 +433,12 @@ export default function FollowingPage() {
                 <Select
                   value={selectedFollowId}
                   onChange={(e) => {
-                    setSelectedFollowId(e.target.value as string);
-                    setPage(1);
+                    const newFollowId = e.target.value as string;
+                    // Reset to page 1 whenever creator filter changes (client-side filter)
+                    if (newFollowId !== selectedFollowId) {
+                      setPage(1);
+                    }
+                    setSelectedFollowId(newFollowId);
                   }}
                   sx={{
                     minWidth: 140,
@@ -320,7 +457,7 @@ export default function FollowingPage() {
                       value={follow.followPurchaseId}
                       sx={{ color: 'var(--app-text)' }}
                     >
-                      {follow.capper.alias}
+                      {follow.capper.alias || 'Unknown'}
                     </MenuItem>
                   ))}
                 </Select>
@@ -334,7 +471,7 @@ export default function FollowingPage() {
           <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
             <CircularProgress />
           </Box>
-        ) : bets.length === 0 ? (
+        ) : filteredBets.length === 0 ? (
           <Paper
             sx={{
               p: 6,
@@ -346,10 +483,12 @@ export default function FollowingPage() {
             }}
           >
             <Typography variant="h6" sx={{ color: 'var(--app-text)', mb: 1 }}>
-              No bets yet
+              {selectedFollowId !== 'all' ? 'No bets from this creator' : 'No bets yet'}
             </Typography>
             <Typography variant="body2" sx={{ color: 'var(--text-muted)' }}>
-              {follows.length === 0
+              {selectedFollowId !== 'all'
+                ? "This creator doesn't have any bets matching your search/filter criteria on this page."
+                : follows.length === 0
                 ? "You're not following anyone yet. Follow creators on the leaderboard to see their bets here."
                 : "The creators you're following haven't posted any bets yet."}
             </Typography>
@@ -377,12 +516,25 @@ export default function FollowingPage() {
                       });
                       
                       if (!res.ok) {
-                        const error = await res.json();
-                        throw new Error(error.error || `Failed to ${action} bet`);
+                        let errorMessage = `Failed to ${action} bet`;
+                        try {
+                          const error = await res.json();
+                          errorMessage = error.error || errorMessage;
+                        } catch {
+                          // If response is not JSON, use default message
+                        }
+                        throw new Error(errorMessage);
                       }
                       
-                      const data = await res.json();
-                      toast.showSuccess(data.message || `Bet ${action === 'follow' ? 'followed' : 'faded'} successfully`);
+                      // Parse response (handle potential JSON parsing errors)
+                      let successMessage = `Bet ${action === 'follow' ? 'followed' : 'faded'} successfully`;
+                      try {
+                        const data = await res.json();
+                        successMessage = data.message || successMessage;
+                      } catch {
+                        // If response is not JSON, use default success message
+                      }
+                      toast.showSuccess(successMessage);
                       
                       // Refresh the feed to update action status
                       await fetchFollowingFeed();
@@ -402,7 +554,8 @@ export default function FollowingPage() {
         )}
 
         {/* Pagination */}
-        {totalPages > 1 && (
+        {/* Only show pagination if not filtering by creator (since creator filter is client-side) */}
+        {selectedFollowId === 'all' && totalPages > 1 && (
           <Box display="flex" justifyContent="center" mt={4}>
             <Pagination
               count={totalPages}
