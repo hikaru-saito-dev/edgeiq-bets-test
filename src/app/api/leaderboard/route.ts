@@ -46,7 +46,8 @@ const buildSortSpec = (sortField: string | null, sortDirection: 'asc' | 'desc') 
       spec.winRate = inverseDirection;
       break;
     case 'winsLosses':
-      spec.plays = direction;
+      spec.wlNet = direction;
+      spec.plays = inverseDirection;
       spec.unitsPL = inverseDirection;
       break;
     case 'currentStreak':
@@ -210,6 +211,9 @@ export async function GET(request: NextRequest) {
             },
           },
           plays: { $size: '$settledBets' },
+          wlNet: {
+            $subtract: ['$winCount', '$lossCount'],
+          },
           unitsPL: {
             $round: [
               {
