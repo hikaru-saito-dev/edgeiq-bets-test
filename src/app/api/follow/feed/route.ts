@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/db';
 import { User } from '@/models/User';
-import { Bet } from '@/models/Bet';
+import { Bet, IBet } from '@/models/Bet';
 import { FollowPurchase } from '@/models/FollowPurchase';
 import { FollowedBetAction } from '@/models/FollowedBetAction';
 import mongoose, { PipelineStage } from 'mongoose';
 
 export const runtime = 'nodejs';
+
+// Type for bet documents from aggregation pipeline (includes capperWhopUserId)
+type BetWithCapper = IBet & {
+  capperWhopUserId?: string;
+};
 
 // Performance monitoring helper
 const logPerformance = (label: string, startTime: number) => {
@@ -157,7 +162,7 @@ export async function GET(request: NextRequest) {
     // Step 5: Optimized bet fetching with MongoDB aggregation
     // Use $setWindowFields for per-capper limiting (MongoDB 5.0+)
     const betsStart = Date.now();
-    let allBetsRaw: any[] = [];
+    let allBetsRaw: BetWithCapper[] = [];
     let totalBets = 0;
 
     if (capperEarliestDate.size > 0) {
@@ -324,7 +329,7 @@ export async function GET(request: NextRequest) {
         const groupedResults = await Bet.aggregate(fallbackPipeline).allowDiskUse(true);
         
         // Apply limits and flatten (O(follows) not O(bets))
-        const limitedBets: any[] = [];
+        const limitedBets: BetWithCapper[] = [];
         for (const group of groupedResults) {
           const limit = capperTotalPlays.get(group._id) || 0;
           limitedBets.push(...(group.bets || []).slice(0, limit));
@@ -387,13 +392,14 @@ export async function GET(request: NextRequest) {
     const formattingStart = Date.now();
     const bets = allBetsRaw.map((bet) => {
       const capperWhopUserId = bet.capperWhopUserId;
-      const metadata = capperToFollowMap.get(capperWhopUserId);
+      const metadata = capperWhopUserId ? capperToFollowMap.get(capperWhopUserId) : undefined;
       const betId = bet._id instanceof mongoose.Types.ObjectId
         ? bet._id.toString()
         : String(bet._id);
       const actionData = actionMap.get(betId);
 
       // Remove internal fields
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { capperWhopUserId: _, ...betData } = bet;
 
       return {
