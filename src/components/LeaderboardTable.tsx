@@ -625,19 +625,20 @@ export default function LeaderboardTable() {
                         <TableCell align="center">
                           {entry.followOffer?.enabled && (
                             <Button
-                              variant="contained"
+                              variant="outlined"
                               size="small"
                               onClick={() => handleViewFollow(entry)}
                               startIcon={<PersonAddAlt1Icon fontSize="small" />}
                               sx={{
-                                background: 'linear-gradient(135deg, #22c55e, #16a34a)',
-                                color: 'white',
+                                borderColor: '#22c55e',
+                                color: '#22c55e',
                                 textTransform: 'none',
                                 fontWeight: 600,
                                 borderRadius: 9999,
                                 px: 2.5,
                                 '&:hover': {
-                                  background: 'linear-gradient(135deg, #16a34a, #15803d)',
+                                  borderColor: '#22c55e',
+                                  backgroundColor: 'rgba(34,197,94,0.08)',
                                 },
                               }}
                             >
