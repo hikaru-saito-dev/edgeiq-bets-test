@@ -607,7 +607,6 @@ export default function LeaderboardTable() {
                                 color: 'white',
                                 textTransform: 'none',
                                 fontWeight: 600,
-                                borderRadius: 9999,
                                 px: 2.5,
                                 '&:hover': {
                                   background: 'linear-gradient(135deg, #16a34a, #047857)',
@@ -634,7 +633,6 @@ export default function LeaderboardTable() {
                                 color: '#22c55e',
                                 textTransform: 'none',
                                 fontWeight: 600,
-                                borderRadius: 9999,
                                 px: 2.5,
                                 '&:hover': {
                                   borderColor: '#22c55e',
